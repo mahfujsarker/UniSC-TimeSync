@@ -1,0 +1,273 @@
+@import "tailwindcss";
+
+/* ============================================
+   TTMS Design System — UniSC Style (Tailwind v4)
+   ============================================ */
+
+@theme {
+  /* Fonts - UniSC uses Poppins/Helvetica */
+  --font-sans: "Poppins", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-heading: "Poppins", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* UniSC Brand Colors */
+  --color-brand-blue: #0052c4;
+  --color-brand-yellow: #ffdd15;
+  --color-brand-dark: #111111;
+  --color-brand-border: #222222;
+
+  /* Surface Colors (Light Theme) */
+  --color-surface-50: #ffffff;
+  --color-surface-100: #f8f9fa;
+  --color-surface-200: #e9ecef;
+  --color-surface-300: #dee2e6;
+  --color-surface-400: #ced4da;
+  --color-surface-500: #adb5bd;
+  --color-surface-600: #6c757d;
+  --color-surface-700: #495057;
+  --color-surface-800: #343a40;
+  --color-surface-900: #212529;
+  --color-surface-950: #111111;
+
+  /* Semantic Colors */
+  --color-success: #198754;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-info: #0dcaf0;
+
+  /* Primary color aliases for existing UI components */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #0052c4; /* UniSC Blue */
+  --color-primary-600: #0044a3;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+}
+
+/* Base Styles */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-surface-100 text-brand-dark font-sans antialiased;
+    background-image: none;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold tracking-tight;
+  }
+}
+
+/* Component Layer - UniSC Flat & Clean Style */
+@layer components {
+  /* Cards */
+  .glass-card {
+    @apply bg-white rounded-md border border-surface-200 shadow-sm transition-all duration-200;
+  }
+  .glass-card:hover {
+    @apply shadow-md border-surface-300;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-2.5 rounded-md text-sm font-semibold transition-all duration-200 cursor-pointer;
+  }
+  .btn:active {
+    @apply scale-[0.98];
+  }
+  .btn:disabled {
+    @apply bg-surface-300 border-surface-300 text-surface-500 hover:bg-surface-300 hover:text-surface-500 cursor-not-allowed opacity-70 transform-none;
+  }
+  .btn-primary {
+    @apply bg-brand-yellow text-brand-dark hover:bg-[#e6c713];
+  }
+  .btn-secondary {
+    @apply bg-transparent border-2 border-brand-dark text-brand-dark hover:bg-brand-dark hover:text-white;
+  }
+  .btn-danger {
+    @apply bg-transparent border-2 border-danger text-danger hover:bg-danger hover:text-white;
+  }
+  .btn-sm {
+    @apply px-4 py-1.5 text-xs rounded-sm;
+  }
+
+  /* Form Styles */
+  .form-group {
+    @apply flex flex-col gap-1.5;
+  }
+  .form-label {
+    @apply text-sm font-medium text-surface-700;
+  }
+  .form-input, .form-select {
+    @apply px-3 py-2.5 bg-white border border-surface-300 rounded-md text-brand-dark text-sm transition-all duration-200 outline-none w-full;
+  }
+  .form-input:focus, .form-select:focus {
+    @apply border-brand-blue ring-2 ring-brand-blue/20;
+  }
+  .form-input::placeholder {
+    @apply text-surface-400;
+  }
+
+  /* Table Styles */
+  .data-table {
+    @apply w-full border-collapse border-spacing-0;
+  }
+  .data-table th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-surface-600 bg-surface-100 border-b border-surface-200;
+  }
+  .data-table td {
+    @apply px-4 py-3 text-sm text-surface-800 border-b border-surface-100 bg-white;
+  }
+  .data-table tbody tr:hover td {
+    @apply bg-surface-50;
+  }
+
+  /* Kanban Board */
+  .kanban-board {
+    @apply grid grid-cols-1 md:grid-cols-5 gap-4 min-h-[500px];
+  }
+  .kanban-column {
+    @apply bg-surface-100 rounded-md p-4 min-h-[400px];
+  }
+  .kanban-column-header {
+    @apply font-heading text-sm font-bold uppercase tracking-wider text-brand-dark mb-4 pb-3 border-b-2 border-brand-blue flex items-center justify-between;
+  }
+  .kanban-card {
+    @apply bg-white border border-surface-200 rounded-md p-3.5 mb-2.5 cursor-grab transition-all duration-200 hover:border-brand-blue hover:shadow-md;
+  }
+  .kanban-card.is-dragging {
+    @apply shadow-lg border-brand-blue rotate-2 scale-[1.02];
+  }
+  .kanban-card-title {
+    @apply font-semibold text-[13px] text-brand-dark mb-1.5;
+  }
+  .kanban-card-meta {
+    @apply text-[11px] text-surface-600 flex flex-col gap-1;
+  }
+
+  /* Timetable Grid */
+  .timetable-grid-container {
+    @apply bg-white rounded-lg border border-surface-200 overflow-hidden;
+  }
+  .time-column {
+    @apply bg-surface-100;
+  }
+  .header-cell {
+    @apply border-b-2 border-surface-300;
+  }
+  .classroom-column {
+    @apply border-r border-surface-200;
+  }
+  .classroom-column:last-child {
+    @apply border-r-0;
+  }
+  .time-slot-label {
+    @apply text-xs text-surface-500;
+  }
+  .time-slot-cell {
+    @apply transition-colors relative;
+  }
+  .scheduled-card {
+    @apply rounded-md shadow-sm overflow-hidden;
+  }
+  .scheduled-card:hover {
+    @apply shadow-md;
+  }
+
+  /* Class Pool */
+  .class-pool {
+    @apply bg-white rounded-lg border border-surface-200 p-4;
+  }
+  .class-pool-empty {
+    @apply bg-surface-50 rounded-lg border border-surface-200;
+  }
+  .unit-group {
+    @apply mb-4;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    @apply w-[260px] bg-white border-r border-surface-200 py-6 flex flex-col h-screen fixed top-0 left-0 z-40;
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 px-6 py-3 text-surface-600 no-underline text-sm font-medium transition-colors border-l-4 border-transparent;
+  }
+  .sidebar-link:hover {
+    @apply bg-surface-50 text-brand-dark;
+  }
+  .sidebar-link.active {
+    @apply bg-surface-50 text-brand-blue border-l-brand-blue font-semibold;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-sm uppercase tracking-wide;
+  }
+  .badge-primary {
+    @apply bg-[#e6eeff] text-[#0044a3];
+  }
+  .badge-success {
+    @apply bg-[#e6f4ea] text-[#137333];
+  }
+  .badge-warning {
+    @apply bg-[#fff8e1] text-[#f57f17];
+  }
+  .badge-danger {
+    @apply bg-[#fce8e6] text-[#c5221f];
+  }
+
+  /* Modal */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal-content {
+    @apply bg-white rounded-lg shadow-xl p-7 w-[90%] max-w-[500px] max-h-[85vh] overflow-y-auto;
+    animation: slideUp 0.3s ease;
+  }
+
+  /* Toast */
+  .toast {
+    @apply fixed top-6 right-6 px-5 py-3.5 rounded-md text-sm font-medium shadow-lg z-60 border;
+    animation: slideUp 0.3s ease;
+  }
+  .toast-success {
+    @apply bg-[#f0f9f4] border-[#198754]/20 text-[#198754];
+  }
+  .toast-error {
+    @apply bg-[#fdf2f2] border-[#dc3545]/20 text-[#dc3545];
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1024px) {
+  .kanban-board {
+    @apply grid-cols-3;
+  }
+}
+
+@media (max-width: 768px) {
+  .kanban-board {
+    @apply grid-cols-1;
+  }
+  .sidebar {
+    @apply w-full h-auto relative bg-white border-r-0 border-b border-surface-200;
+  }
+}
