@@ -27,7 +27,7 @@ export default function KanbanBoard({ data, onDragEnd, onCardClick, readOnly = f
       <div className="kanban-board">
         {DAYS.map(day => (
           <Droppable key={day} droppableId={day} isDropDisabled={readOnly}>
-            {(provided, snapshot) => (
+            {(provided) => (
               <div
                 className="kanban-column"
                 ref={provided.innerRef}

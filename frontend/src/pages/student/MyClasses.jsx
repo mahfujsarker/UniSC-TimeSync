@@ -17,7 +17,7 @@ export default function MyClasses() {
     try {
       const { data } = await api.get('/student/my-classes');
       setClasses(data);
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to load classes', type: 'error' });
     } finally {
       setLoading(false);
@@ -32,7 +32,7 @@ export default function MyClasses() {
       await api.delete(`/student/unenroll/${selectionId}`);
       setToast({ message: 'Unenrolled successfully', type: 'success' });
       fetchClasses();
-    } catch (err) {
+    } catch {
       setToast({ message: 'Unenroll failed', type: 'error' });
     }
   };

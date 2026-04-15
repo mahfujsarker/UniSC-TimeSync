@@ -1,9 +1,7 @@
 /**
  * Trimester Manager Page
  */
-import { useState, useEffect } from 'react';
 import CrudManager from './CrudManager';
-import api from '../../api/axios';
 
 export default function TrimesterManager() {
 

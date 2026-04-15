@@ -19,7 +19,7 @@ export default function UnitManager() {
   const [unitForm, setUnitForm] = useState({
     name: '',
     code: '',
-    degree_id: '',
+    degree_ids: [],
     classroom_type: 'normal',
     total_students: 0,
     class_duration: 1,
@@ -39,7 +39,7 @@ export default function UnitManager() {
       setUnits(unitRes.data);
       setDegrees(degRes.data);
       setTrimesters(triRes.data);
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to load data', type: 'error' });
     } finally {
       setLoading(false);
@@ -59,7 +59,7 @@ export default function UnitManager() {
       setUnitForm({
         name: unit.name,
         code: unit.code,
-        degree_id: unit.degree_id,
+        degree_ids: (unit.degrees || []).map(d => d.id),
         classroom_type: unit.classroom_type,
         total_students: unit.total_students || 0,
         class_duration: unit.class_duration || 1,
@@ -71,7 +71,7 @@ export default function UnitManager() {
       setUnitForm({
         name: '',
         code: '',
-        degree_id: '',
+        degree_ids: [],
         classroom_type: 'normal',
         total_students: 0,
         class_duration: 1,
@@ -94,13 +94,25 @@ export default function UnitManager() {
     });
   };
 
+  const handleDegreeToggle = (degreeId) => {
+    setUnitForm(prev => {
+      const exists = prev.degree_ids.includes(degreeId);
+      if (exists) {
+        return { ...prev, degree_ids: prev.degree_ids.filter(id => id !== degreeId) };
+      } else {
+        return { ...prev, degree_ids: [...prev.degree_ids, degreeId] };
+      }
+    });
+  };
+
   const saveUnit = async (e) => {
     e.preventDefault();
     try {
       if (editUnit) {
         const response = await api.put(`/units/${editUnit.id}`, {
           ...unitForm,
-          regenerate_classes: unitForm.regenerate_classes
+          regenerate_classes: unitForm.regenerate_classes,
+          trimester_for_classes_regen: unitForm.trimester_for_classes_regen || unitForm.trimester_ids?.[0]
         });
         setToast({ message: 'Unit updated', type: 'success' });
         if (response.data._classes_regenerated) {
@@ -126,7 +138,7 @@ export default function UnitManager() {
       await api.delete(`/units/${id}`);
       setToast({ message: 'Unit deleted', type: 'success' });
       fetchData();
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to delete unit', type: 'error' });
     }
   };
@@ -136,7 +148,7 @@ export default function UnitManager() {
       await api.post('/classes', { unit_id: unitId, trimester_id: trimesterId });
       setToast({ message: 'Classes regenerated successfully', type: 'success' });
       fetchData();
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to regenerate classes', type: 'error' });
     }
   };
@@ -183,7 +195,7 @@ export default function UnitManager() {
                 <tr>
                   <th>Code</th>
                   <th>Unit Name</th>
-                  <th>Degree</th>
+                  <th>Degrees</th>
                   <th>Room Type</th>
                   <th>Students</th>
                   <th>Duration</th>
@@ -199,7 +211,16 @@ export default function UnitManager() {
                     </td>
                     <td className="font-medium text-brand-dark">{unit.name}</td>
                     <td>
-                      <span className="text-surface-600">{unit.degree_code}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {(unit.degrees || []).slice(0, 2).map(deg => (
+                          <span key={deg.id} className="bg-[#e6eeff] text-[#0044a3] px-1.5 py-0.5 rounded text-[10px] font-bold">
+                            {deg.code}
+                          </span>
+                        ))}
+                        {(unit.degrees || []).length > 2 && (
+                          <span className="text-surface-500 text-xs">+{(unit.degrees || []).length - 2}</span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`badge ${unit.classroom_type === 'lab' ? 'badge-warning' : 'badge-primary'}`}>
@@ -286,18 +307,26 @@ export default function UnitManager() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Associated Degree</label>
-            <select 
-              className="form-select" 
-              required
-              value={unitForm.degree_id} 
-              onChange={e => setUnitForm({ ...unitForm, degree_id: e.target.value })}
-            >
-              <option value="">Select degree...</option>
-              {degrees.map(d => (
-                <option key={d.id} value={d.id}>{d.code} — {d.name}</option>
-              ))}
-            </select>
+            <label className="form-label block mb-2">Associated Degrees</label>
+            {degrees.length === 0 ? (
+              <div className="text-sm text-surface-500 italic p-3 bg-surface-50 rounded border border-surface-200">
+                No degrees exist. Create them first.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-surface-50 rounded border border-surface-200">
+                {degrees.map(d => (
+                  <label key={d.id} className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-brand-blue rounded border-surface-300"
+                      checked={unitForm.degree_ids.includes(d.id)}
+                      onChange={() => handleDegreeToggle(d.id)}
+                    />
+                    <span className="text-sm font-medium text-surface-700">{d.code} — {d.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -382,8 +411,8 @@ export default function UnitManager() {
           {editUnit && (
             <div className="form-group">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   className="w-4 h-4 text-brand-blue rounded border-surface-300"
                   checked={unitForm.regenerate_classes || false}
                   onChange={e => setUnitForm({ ...unitForm, regenerate_classes: e.target.checked })}
@@ -392,13 +421,15 @@ export default function UnitManager() {
               </label>
               {unitForm.regenerate_classes && (
                 <div className="mt-2">
-                  <select 
-                    className="form-select" 
-                    value={unitForm.trimester_for_classes_regen || ''} 
+                  <label className="form-label text-xs text-surface-500">Select trimester to regenerate:</label>
+                  <select
+                    className="form-select"
+                    value={unitForm.trimester_for_classes_regen || unitForm.trimester_ids?.[0] || ''}
                     onChange={e => setUnitForm({ ...unitForm, trimester_for_classes_regen: e.target.value })}
+                    required
                   >
                     <option value="">Select trimester...</option>
-                    {trimesters.map(t => (
+                    {trimesters.filter(t => unitForm.trimester_ids.includes(t.id)).map(t => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>

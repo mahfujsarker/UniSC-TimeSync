@@ -7,7 +7,7 @@ const pool = require('../config/db');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
-  const excludeClause = excludeId ? ' AND te.id != $6' : '';
+  const excludeClause = excludeId ? ' AND te.id != $5' : '';
   
   const roomParams = [classroom_id, day_of_week, start_time, end_time];
   if (excludeId) roomParams.push(excludeId);
@@ -58,6 +58,10 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
   }
 
   if (class_id) {
+    const classParams = [class_id, day_of_week, start_time, end_time];
+    if (excludeId) classParams.push(excludeId);
+    const classExcludeClause = excludeId ? ' AND te.id != $5' : '';
+    
     const classConflict = await pool.query(
       `SELECT te.*, u.name as unit_name, u.code as unit_code, cl.group_name
        FROM timetable_entries te
@@ -67,8 +71,8 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
          AND te.day_of_week = $2
          AND te.start_time < $4 
          AND te.end_time > $3
-         ${excludeClause}`,
-      [class_id, day_of_week, start_time, end_time]
+         ${classExcludeClause}`,
+      classParams
     );
     if (classConflict.rows.length > 0) {
       const c = classConflict.rows[0];
@@ -154,7 +158,8 @@ async function getAll(req, res) {
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
       JOIN trimesters tr ON te.trimester_id = tr.id
-      JOIN degrees d ON u.degree_id = d.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
+      JOIN degrees d ON ud.degree_id = d.id
       WHERE 1=1
     `;
     const params = [];
@@ -165,7 +170,7 @@ async function getAll(req, res) {
       params.push(trimester_id);
     }
     if (degree_id) {
-      query += ` AND u.degree_id = $${paramIdx++}`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
     if (classroom_id) {
@@ -198,6 +203,7 @@ async function getKanban(req, res) {
         cl.group_name, cl.required_room_type, cl.duration as class_duration
       FROM timetable_entries te
       JOIN units u ON te.unit_id = u.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN classes cl ON te.class_id = cl.id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
@@ -206,7 +212,7 @@ async function getKanban(req, res) {
     let paramIdx = 2;
 
     if (degree_id) {
-      query += ` AND u.degree_id = $${paramIdx++}`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
     if (classroom_id) {

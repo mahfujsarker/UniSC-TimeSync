@@ -65,12 +65,21 @@ CREATE TABLE IF NOT EXISTS units (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,
-    degree_id UUID NOT NULL REFERENCES degrees(id) ON DELETE CASCADE,
     classroom_type VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (classroom_type IN ('lab', 'normal')),
     total_students INTEGER NOT NULL DEFAULT 0,
     class_duration INTEGER NOT NULL DEFAULT 1 CHECK (class_duration >= 1 AND class_duration <= 4),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- Unit-Degree associations (many-to-many)
+-- ============================================
+CREATE TABLE IF NOT EXISTS unit_degrees (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    degree_id UUID NOT NULL REFERENCES degrees(id) ON DELETE CASCADE,
+    UNIQUE(unit_id, degree_id)
 );
 
 -- ============================================
@@ -174,7 +183,8 @@ CREATE TABLE IF NOT EXISTS academic_calendar (
 -- ============================================
 -- Indexes for performance
 -- ============================================
-CREATE INDEX IF NOT EXISTS idx_units_degree ON units(degree_id);
+CREATE INDEX IF NOT EXISTS idx_unit_degrees_unit ON unit_degrees(unit_id);
+CREATE INDEX IF NOT EXISTS idx_unit_degrees_degree ON unit_degrees(degree_id);
 CREATE INDEX IF NOT EXISTS idx_classes_unit ON classes(unit_id);
 CREATE INDEX IF NOT EXISTS idx_classes_trimester ON classes(trimester_id);
 CREATE INDEX IF NOT EXISTS idx_timetable_trimester ON timetable_entries(trimester_id);

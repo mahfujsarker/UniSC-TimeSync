@@ -2,6 +2,7 @@
  * View Timetable — Student read-only Kanban view.
  */
 import { useState, useEffect } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
 import api from '../../api/axios';
 import KanbanBoard from '../../components/KanbanBoard';
 
@@ -24,15 +25,22 @@ export default function ViewTimetable() {
   }, []);
 
   useEffect(() => {
-    if (selectedTrimester && selectedDegree) {
-      setLoading(true);
-      api.get(`/timetable/kanban/${selectedTrimester}?degree_id=${selectedDegree}`)
-        .then(res => setKanbanData(res.data))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    } else {
+    if (!selectedTrimester || !selectedDegree) {
       setKanbanData({});
+      return;
     }
+
+    const abortController = new AbortController();
+    setLoading(true);
+
+    api.get(`/timetable/kanban/${selectedTrimester}?degree_id=${selectedDegree}`, { signal: abortController.signal })
+      .then(res => setKanbanData(res.data))
+      .catch(() => {})
+      .finally(() => {
+        if (!abortController.signal.aborted) setLoading(false);
+      });
+
+    return () => abortController.abort();
   }, [selectedTrimester, selectedDegree]);
 
   return (
@@ -73,3 +81,4 @@ export default function ViewTimetable() {
     </div>
   );
 }
+/* eslint-enable react-hooks/set-state-in-effect */

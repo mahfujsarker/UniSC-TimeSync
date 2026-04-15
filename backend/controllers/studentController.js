@@ -22,24 +22,25 @@ async function viewTimetable(req, res) {
         (SELECT COUNT(*) FROM student_selections ss WHERE ss.timetable_entry_id = te.id) as enrolled_count
       FROM timetable_entries te
       JOIN units u ON te.unit_id = u.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
+      JOIN degrees d ON ud.degree_id = d.id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
       JOIN trimesters tr ON te.trimester_id = tr.id
-      JOIN degrees d ON u.degree_id = d.id
       WHERE 1=1
     `;
     const params = [];
     let paramIdx = 1;
 
     if (degree_id) {
-      query += ` AND u.degree_id = $${paramIdx++}`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
     if (trimester_id) {
       query += ` AND te.trimester_id = $${paramIdx++}`;
       params.push(trimester_id);
     }
-    query += ' ORDER BY te.day_of_week, te.start_time';
+    query += ' GROUP BY te.id, u.id, c.id, t.id, d.id, tr.id ORDER BY te.day_of_week, te.start_time';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -132,11 +133,13 @@ async function myClasses(req, res) {
        FROM student_selections ss
        JOIN timetable_entries te ON ss.timetable_entry_id = te.id
        JOIN units u ON te.unit_id = u.id
+       JOIN unit_degrees ud ON u.id = ud.unit_id
+       JOIN degrees d ON ud.degree_id = d.id
        JOIN classrooms c ON te.classroom_id = c.id
        JOIN tutors t ON te.tutor_id = t.id
        JOIN trimesters tr ON te.trimester_id = tr.id
-       JOIN degrees d ON u.degree_id = d.id
        WHERE ss.user_id = $1
+       GROUP BY ss.id, te.id, u.id, c.id, t.id, d.id, tr.id
        ORDER BY te.day_of_week, te.start_time`,
       [userId]
     );

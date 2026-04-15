@@ -22,7 +22,7 @@ export default function DegreeManager() {
       setLoading(true);
       const degRes = await api.get('/degrees');
       setDegrees(degRes.data);
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to load degrees', type: 'error' });
     } finally {
       setLoading(false);
@@ -49,8 +49,8 @@ export default function DegreeManager() {
       }
       setShowDegreeModal(false);
       fetchDegrees();
-    } catch (err) {
-      setToast({ message: err.response?.data?.error || 'Failed to save degree', type: 'error' });
+    } catch {
+      setToast({ message: 'Failed to save degree', type: 'error' });
     }
   };
 
@@ -60,7 +60,7 @@ export default function DegreeManager() {
       await api.delete(`/degrees/${id}`);
       setToast({ message: 'Degree deleted', type: 'success' });
       fetchDegrees();
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to delete degree', type: 'error' });
     }
   };

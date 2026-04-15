@@ -35,7 +35,8 @@ async function getAll(req, res) {
              (SELECT COUNT(*) FROM timetable_entries te WHERE te.class_id = c.id) as scheduled_count
       FROM classes c
       JOIN units u ON c.unit_id = u.id
-      JOIN degrees d ON u.degree_id = d.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
+      JOIN degrees d ON ud.degree_id = d.id
       JOIN trimesters t ON c.trimester_id = t.id
       WHERE 1=1
     `;
@@ -51,10 +52,10 @@ async function getAll(req, res) {
       params.push(unit_id);
     }
     if (degree_id) {
-      query += ` AND u.degree_id = $${paramIdx++}`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
-    query += ' ORDER BY u.code, c.group_name';
+    query += ' GROUP BY c.id, u.id, d.id, t.id ORDER BY u.code, c.group_name';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -74,7 +75,8 @@ async function getById(req, res) {
               t.name as trimester_name
        FROM classes c
        JOIN units u ON c.unit_id = u.id
-       JOIN degrees d ON u.degree_id = d.id
+       JOIN unit_degrees ud ON u.id = ud.unit_id
+       JOIN degrees d ON ud.degree_id = d.id
        JOIN trimesters t ON c.trimester_id = t.id
        WHERE c.id = $1`,
       [id]
@@ -100,7 +102,8 @@ async function getUnscheduled(req, res) {
              t.name as trimester_name
       FROM classes c
       JOIN units u ON c.unit_id = u.id
-      JOIN degrees d ON u.degree_id = d.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
+      JOIN degrees d ON ud.degree_id = d.id
       JOIN trimesters t ON c.trimester_id = t.id
       WHERE NOT EXISTS (
         SELECT 1 FROM timetable_entries te 
@@ -115,7 +118,7 @@ async function getUnscheduled(req, res) {
       params.push(trimester_id);
     }
     if (degree_id) {
-      query += ` AND u.degree_id = $${paramIdx++}`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
     query += ' ORDER BY u.code, c.group_name';
@@ -198,7 +201,7 @@ async function createBatchForTrimester(req, res) {
     const params = [trimester_id];
     
     if (degree_id) {
-      unitQuery += ' AND u.degree_id = $2';
+      unitQuery += ' AND EXISTS (SELECT 1 FROM unit_degrees ud WHERE ud.unit_id = u.id AND ud.degree_id = $2)';
       params.push(degree_id);
     }
 

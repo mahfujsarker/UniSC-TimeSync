@@ -100,24 +100,25 @@ async function getAll(req, res) {
         tr.name as trimester_name
       FROM timetable_entries te
       JOIN units u ON te.unit_id = u.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
       JOIN trimesters tr ON te.trimester_id = tr.id
-      JOIN degrees d ON u.degree_id = d.id
+      JOIN degrees d ON ud.degree_id = d.id
       WHERE 1=1
-    \`;
+    `;
     const params = [];
     let paramIdx = 1;
 
     if (trimester_id) {
-      query += \` AND te.trimester_id = \$\${paramIdx++}\`;
+      query += ` AND te.trimester_id = $${paramIdx++}`;
       params.push(trimester_id);
     }
     if (degree_id) {
-      query += \` AND u.degree_id = \$\${paramIdx++}\`;
+      query += ` AND ud.degree_id = $${paramIdx++}`;
       params.push(degree_id);
     }
-    query += ' ORDER BY te.day_of_week, te.start_time';
+    query += ' GROUP BY te.id, u.id, c.id, t.id, d.id, tr.id ORDER BY te.day_of_week, te.start_time';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -132,23 +133,24 @@ async function getKanban(req, res) {
     const { trimesterId } = req.params;
     const { degree_id } = req.query;
 
-    let query = \`SELECT te.*,
+    let query = `SELECT te.*,
         u.name as unit_name, u.code as unit_code,
         c.room_number, c.location as room_location, c.max_capacity, c.type as room_type,
         t.name as tutor_name, t.email as tutor_email
       FROM timetable_entries te
       JOIN units u ON te.unit_id = u.id
+      JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
-      WHERE te.trimester_id = $1\`;
+      WHERE te.trimester_id = $1`;
     const params = [trimesterId];
 
     if (degree_id) {
-      query += \` AND u.degree_id = $2\`;
+      query += ` AND ud.degree_id = $2`;
       params.push(degree_id);
     }
     
-    query += \` ORDER BY te.start_time\`;
+    query += ` GROUP BY te.id, u.id, c.id, t.id ORDER BY te.start_time`;
 
     const result = await pool.query(query, params);
 

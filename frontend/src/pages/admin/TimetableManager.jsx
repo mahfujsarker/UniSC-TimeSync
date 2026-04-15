@@ -92,7 +92,7 @@ export default function TimetableManager() {
 
       setUnscheduledClasses(unscheduledRes.data);
       setScheduledEntries(entriesRes.data);
-    } catch (err) {
+    } catch {
       setToast({ message: 'Failed to load timetable data', type: 'error' });
     } finally {
       setLoading(false);
@@ -177,12 +177,12 @@ export default function TimetableManager() {
 
       setShowModal(false);
       loadTimetableData();
-    } catch (err) {
-      const conflicts = err.response?.data?.conflicts;
+    } catch (e) {
+      const conflicts = e.response?.data?.conflicts;
       if (conflicts?.length > 0) {
         setToast({ message: `Conflict: ${conflicts[0].message}`, type: 'error' });
       } else {
-        setToast({ message: err.response?.data?.error || 'Failed to save', type: 'error' });
+        setToast({ message: e.response?.data?.error || 'Failed to save', type: 'error' });
       }
     } finally {
       setSaving(false);
@@ -196,7 +196,7 @@ export default function TimetableManager() {
       setToast({ message: 'Entry deleted', type: 'success' });
       setShowModal(false);
       loadTimetableData();
-    } catch (err) {
+    } catch {
       setToast({ message: 'Delete failed', type: 'error' });
     }
   };

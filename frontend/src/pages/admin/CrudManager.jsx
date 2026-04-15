@@ -27,7 +27,7 @@ export default function CrudManager({
       setLoading(true);
       const { data } = await api.get(apiPath);
       setItems(data);
-    } catch (err) {
+    } catch {
       setToast({ message: `Failed to load ${entityName}s`, type: 'error' });
     } finally {
       setLoading(false);
@@ -65,8 +65,8 @@ export default function CrudManager({
       }
       setShowModal(false);
       fetchItems();
-    } catch (err) {
-      setToast({ message: err.response?.data?.error || 'Operation failed', type: 'error' });
+    } catch {
+      setToast({ message: 'Operation failed', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -78,8 +78,8 @@ export default function CrudManager({
       await api.delete(`${apiPath}/${id}`);
       setToast({ message: `${entityName} deleted`, type: 'success' });
       fetchItems();
-    } catch (err) {
-      setToast({ message: err.response?.data?.error || 'Delete failed', type: 'error' });
+    } catch {
+      setToast({ message: 'Delete failed', type: 'error' });
     }
   };
 

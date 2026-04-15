@@ -3,6 +3,7 @@
  * Manages user state, login, register, and logout across the app.
  */
 import { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect, react-refresh/only-export-components */
 import api from '../api/axios';
 
 const AuthContext = createContext(null);
@@ -16,7 +17,8 @@ export function AuthProvider({ children }) {
     const savedUser = localStorage.getItem('user');
     const token = localStorage.getItem('accessToken');
     if (savedUser && token) {
-      setUser(JSON.parse(savedUser));
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
     }
     setLoading(false);
   }, []);
@@ -42,7 +44,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await api.post('/auth/logout');
-    } catch (e) {
+    } catch {
       // Ignore errors — user should still be logged out locally
     }
     localStorage.removeItem('accessToken');
@@ -63,3 +65,4 @@ export function useAuth() {
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }
+/* eslint-enable react-hooks/set-state-in-effect, react-refresh/only-export-components */

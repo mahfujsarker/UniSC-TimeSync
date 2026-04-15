@@ -3,7 +3,7 @@
  * Interactive grid with classrooms as columns and time slots as rows.
  * Supports drag-and-drop scheduling from the class pool.
  */
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 
 const TIME_SLOTS = [];
@@ -27,14 +27,12 @@ const DAY_COLORS = {
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-export default function TimetableGrid({ 
-  classrooms, 
-  entries, 
+export default function TimetableGrid({
+  classrooms,
+  entries,
   selectedDay,
-  onSlotDrop,
   onEntryClick,
-  readOnly = false,
-  unscheduledClasses = []
+  readOnly = false
 }) {
   const [hoveredSlot, setHoveredSlot] = useState(null);
 
@@ -44,7 +42,6 @@ export default function TimetableGrid({
       if (selectedDay && entry.day_of_week !== selectedDay) return false;
       
       const entryStart = entry.start_time.substring(0, 5);
-      const entryEnd = entry.end_time.substring(0, 5);
       return entryStart === timeSlot;
     });
   };
@@ -120,7 +117,7 @@ export default function TimetableGrid({
                             </div>
                           )}
 
-                          {cellEntries.map((entry, index) => {
+                          {cellEntries.map((entry) => {
                             const isFirstSlot = entry.start_time.substring(0, 5) === slot;
                             if (!isFirstSlot) return null;
 
