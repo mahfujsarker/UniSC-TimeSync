@@ -1,9 +1,8 @@
 /**
  * Unit Controller
- * CRUD operations for units/courses with automatic class generation.
+ * CRUD operations for units/courses.
  */
 const pool = require('../config/db');
-const classController = require('./classController');
 
 async function getAll(req, res) {
   try {
@@ -15,10 +14,10 @@ async function getAll(req, res) {
              COALESCE(json_agg(
                json_build_object('id', d.id, 'code', d.code, 'name', d.name)
              ) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees
-      FROM units u
-      LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
-      LEFT JOIN degrees d ON ud.degree_id = d.id
-      LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
+       FROM units u
+       LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
+       LEFT JOIN degrees d ON ud.degree_id = d.id
+       LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
     `;
     const params = [];
     const conditions = [];
@@ -93,10 +92,51 @@ async function getByDegree(req, res) {
   }
 }
 
+async function getByDegreeAndTrimester(req, res) {
+  try {
+    const { degree_id, trimester_id } = req.query;
+    
+    let query = `
+      SELECT u.*,
+             COALESCE(json_agg(DISTINCT jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees,
+             COALESCE(json_agg(DISTINCT ut2.trimester_id) FILTER (WHERE ut2.trimester_id IS NOT NULL), '[]') as trimester_ids,
+             COALESCE(
+               (SELECT json_agg(jsonb_build_object('id', c.id, 'group_name', c.group_name, 'duration', c.duration, 'max_capacity', c.max_capacity, 'required_room_type', c.required_room_type))
+                FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $2), '[]'
+             ) as classes
+      FROM units u
+      JOIN unit_degrees ud ON u.id = ud.unit_id
+      JOIN degrees d ON ud.degree_id = d.id
+      JOIN unit_trimesters ut2 ON u.id = ut2.unit_id
+      WHERE ut2.trimester_id = $2
+    `;
+    const params = [degree_id, trimester_id];
+    
+    if (degree_id) {
+      query += ` AND ud.degree_id = $1`;
+    }
+    
+    query += ` GROUP BY u.id ORDER BY u.code ASC`;
+    
+    const result = await pool.query(query, params);
+    
+    const unitsWithStatus = result.rows.map(unit => ({
+      ...unit,
+      has_classes: (unit.classes || []).length > 0,
+      classes_count: (unit.classes || []).length
+    }));
+    
+    res.json(unitsWithStatus);
+  } catch (err) {
+    console.error('Error fetching units by degree and trimester:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 async function create(req, res) {
   const client = await pool.connect();
   try {
-    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids, auto_generate_classes, trimester_for_classes } = req.body;
+    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids } = req.body;
     
     if (!name || !code || !degree_ids || degree_ids.length === 0) {
       return res.status(400).json({ error: 'Name, code, and at least one degree_id are required' });
@@ -127,37 +167,10 @@ async function create(req, res) {
       }
     }
 
-    let classesCreated = null;
-    if (auto_generate_classes && trimester_for_classes) {
-      const numClasses = classController.calculateNumberOfClasses(
-        total_students || 0, 
-        classroom_type || 'normal'
-      );
-      const groups = [];
-      for (let i = 0; i < numClasses; i++) {
-        const letter = String.fromCharCode(65 + i);
-        const capacity = classController.ROOM_CAPACITIES[classroom_type || 'normal'] || 30;
-        const result = await client.query(
-          `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (unit_id, trimester_id, group_name) DO UPDATE SET
-             max_capacity = $6, duration = $5, updated_at = NOW()
-           RETURNING *`,
-          [newUnit.id, trimester_for_classes, `Group ${letter}`, classroom_type || 'normal', class_duration || 1, capacity]
-        );
-        groups.push(result.rows[0]);
-      }
-      classesCreated = groups;
-    }
-
     await client.query('COMMIT');
     
     newUnit.trimester_ids = trimester_ids || [];
-    newUnit._classes_generated = classesCreated ? {
-      trimester_id: trimester_for_classes,
-      count: classesCreated.length,
-      classes: classesCreated
-    } : null;
+    newUnit.degrees = degree_ids.map(id => ({ id }));
     
     res.status(201).json(newUnit);
   } catch (err) {
@@ -179,7 +192,7 @@ async function update(req, res) {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids, regenerate_classes } = req.body;
+    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids } = req.body;
     
     await client.query('BEGIN');
 
@@ -214,32 +227,6 @@ async function update(req, res) {
     );
     const updatedUnit = result.rows[0];
 
-    if (total_students !== undefined && total_students !== existingUnit.total_students) {
-      const trimesterRows = await client.query('SELECT trimester_id FROM unit_trimesters WHERE unit_id = $1', [id]);
-      const trimesterIds = trimesterRows.rows.map(r => r.trimester_id);
-      
-      for (const tId of trimesterIds) {
-        await client.query('DELETE FROM classes WHERE unit_id = $1 AND trimester_id = $2', [id, tId]);
-        
-        const numClasses = classController.calculateNumberOfClasses(
-          total_students,
-          classroom_type || existingUnit.classroom_type
-        );
-        const duration = class_duration || existingUnit.class_duration;
-        const roomType = classroom_type || existingUnit.classroom_type;
-        const capacity = classController.ROOM_CAPACITIES[roomType] || 30;
-
-        for (let i = 0; i < numClasses; i++) {
-          const letter = String.fromCharCode(65 + i);
-          await client.query(
-            `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [id, tId, `Group ${letter}`, roomType, duration, capacity]
-          );
-        }
-      }
-    }
-
     if (Array.isArray(degree_ids)) {
       await client.query('DELETE FROM unit_degrees WHERE unit_id = $1', [id]);
       const uniqueDegreeIds = [...new Set(degree_ids)];
@@ -261,31 +248,6 @@ async function update(req, res) {
         );
       }
       updatedUnit.trimester_ids = trimester_ids;
-    }
-
-    if (regenerate_classes) {
-      const trimesterId = req.body.trimester_for_classes_regen || trimester_ids?.[0];
-      if (trimesterId) {
-        await client.query('DELETE FROM classes WHERE unit_id = $1 AND trimester_id = $2', [id, trimesterId]);
-        const numClasses = classController.calculateNumberOfClasses(
-          total_students || existingUnit.total_students,
-          classroom_type || existingUnit.classroom_type
-        );
-        const duration = class_duration || existingUnit.class_duration;
-        const roomType = classroom_type || existingUnit.classroom_type;
-        const capacity = classController.ROOM_CAPACITIES[roomType] || 30;
-
-        for (let i = 0; i < numClasses; i++) {
-          const letter = String.fromCharCode(65 + i);
-          await client.query(
-            `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (unit_id, trimester_id, group_name) DO UPDATE SET
-               max_capacity = $6, duration = $5, updated_at = NOW()`,
-            [id, trimesterId, `Group ${letter}`, roomType, duration, capacity]
-          );
-        }
-      }
     }
 
     await client.query('COMMIT');
@@ -313,4 +275,4 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, getById, getByDegree, create, update, remove };
+module.exports = { getAll, getById, getByDegree, getByDegreeAndTrimester, create, update, remove };

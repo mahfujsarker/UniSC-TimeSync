@@ -1,12 +1,14 @@
 /**
- * Timetable Manager Page — Admin Kanban Grid
- * Grid-based timetable with classrooms as columns and time slots as rows.
+ * Timetable Manager Page — Card-based Unit Management with Class Generation
+ * Degree + Trimester selection loads all available units as cards.
+ * Per-unit and global class generation support.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import Toast from '../../components/Toast';
+import KanbanBoard from '../../components/KanbanBoard';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
@@ -15,11 +17,6 @@ for (let hour = 8; hour < 22; hour++) {
   TIME_SLOTS.push(`${hour.toString().padStart(2, '0')}:00`);
   TIME_SLOTS.push(`${hour.toString().padStart(2, '0')}:30`);
 }
-
-const ROOM_TYPE_COLORS = {
-  lab: { header: 'bg-amber-100', card: 'bg-amber-50 border-amber-300', badge: 'bg-amber-200 text-amber-800' },
-  normal: { header: 'bg-blue-100', card: 'bg-blue-50 border-blue-300', badge: 'bg-blue-200 text-blue-800' }
-};
 
 const DAY_COLORS = {
   Monday: '#6366f1',
@@ -37,14 +34,14 @@ export default function TimetableManager() {
   
   const [selectedDegree, setSelectedDegree] = useState('');
   const [selectedTrimester, setSelectedTrimester] = useState('');
-  const [selectedDay, setSelectedDay] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
-
-  const [unscheduledClasses, setUnscheduledClasses] = useState([]);
+  
+  const [units, setUnits] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [scheduledEntries, setScheduledEntries] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [generatingUnit, setGeneratingUnit] = useState(null);
 
-  const [showModal, setShowModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [scheduleForm, setScheduleForm] = useState({
     class_id: '',
@@ -71,73 +68,122 @@ export default function TimetableManager() {
       setClassrooms(c.data.filter(cl => cl.is_available));
       setTutors(t.data);
       
+      if (d.data.length > 0) {
+        setSelectedDegree(d.data[0].id);
+      }
       if (tr.data.length > 0) {
         setSelectedTrimester(tr.data[0].id);
       }
     }).catch(() => {});
   }, []);
 
-  const loadTimetableData = useCallback(async () => {
+  const loadUnits = useCallback(async () => {
     if (!selectedTrimester) return;
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (selectedDegree) params.append('degree_id', selectedDegree);
-      if (selectedDay) params.append('day_of_week', selectedDay);
-
-      const [unscheduledRes, entriesRes] = await Promise.all([
-        api.get(`/classes/unscheduled?trimester_id=${selectedTrimester}${selectedDegree ? `&degree_id=${selectedDegree}` : ''}`),
-        api.get(`/timetable?trimester_id=${selectedTrimester}&${params.toString()}`)
-      ]);
-
-      setUnscheduledClasses(unscheduledRes.data);
-      setScheduledEntries(entriesRes.data);
+      params.append('trimester_id', selectedTrimester);
+      
+      const res = await api.get(`/units/by-degree?${params.toString()}`);
+      setUnits(res.data);
     } catch {
-      setToast({ message: 'Failed to load timetable data', type: 'error' });
+      setToast({ message: 'Failed to load units', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [selectedTrimester, selectedDegree, selectedDay]);
+  }, [selectedTrimester, selectedDegree]);
 
-  useEffect(() => { loadTimetableData(); }, [loadTimetableData]);
-
-  const handleDragEnd = async (result) => {
-    const { source, destination, draggableId } = result;
-    
-    if (!destination) return;
-
-    if (source.droppableId === 'class-pool' && destination.droppableId.startsWith('classroom-')) {
-      const classId = draggableId.replace('pool-', '');
-      const classData = unscheduledClasses.find(c => c.id === classId);
-      if (!classData) return;
-
-      const classroomId = destination.droppableId.replace('classroom-', '');
-      const classroom = classrooms.find(c => c.id === classroomId);
+  const loadClasses = useCallback(async () => {
+    if (!selectedTrimester) return;
+    try {
+      const params = new URLSearchParams({ trimester_id: selectedTrimester });
+      if (selectedDegree) params.append('degree_id', selectedDegree);
       
-      if (!classroom) return;
-      
-      if (classroom.type !== classData.required_room_type) {
-        setToast({ 
-          message: `Room type mismatch: ${classData.required_room_type === 'lab' ? 'Lab' : 'Normal'} room required`, 
-          type: 'error' 
-        });
-        return;
-      }
-
-      const duration = classData.duration || 1;
-      setScheduleForm({
-        class_id: classId,
-        unit_id: classData.unit_id,
-        classroom_id: classroomId,
-        tutor_id: '',
-        day_of_week: selectedDay || 'Monday',
-        start_time: '09:00',
-        end_time: `${(9 + duration).toString().padStart(2, '0')}:00`,
-        create_recurring: true
-      });
-      setEditingEntry(null);
-      setShowModal(true);
+      const res = await api.get(`/classes?${params.toString()}`);
+      setClasses(res.data);
+    } catch {
+      setToast({ message: 'Failed to load classes', type: 'error' });
     }
+  }, [selectedTrimester, selectedDegree]);
+
+  const loadScheduledEntries = useCallback(async () => {
+    if (!selectedTrimester) return;
+    try {
+      const params = new URLSearchParams({ trimester_id: selectedTrimester });
+      if (selectedDegree) params.append('degree_id', selectedDegree);
+      
+      const res = await api.get(`/timetable?${params.toString()}`);
+      setScheduledEntries(res.data);
+    } catch {
+      setToast({ message: 'Failed to load scheduled entries', type: 'error' });
+    }
+  }, [selectedTrimester, selectedDegree]);
+
+  useEffect(() => { 
+    if (selectedTrimester) {
+      loadUnits();
+      loadClasses();
+      loadScheduledEntries();
+    }
+  }, [loadUnits, loadClasses, loadScheduledEntries, selectedTrimester]);
+
+  const handleDegreeChange = (degreeId) => {
+    setSelectedDegree(degreeId);
+  };
+
+  const handleTrimesterChange = (trimesterId) => {
+    setSelectedTrimester(trimesterId);
+  };
+
+  const handleGenerateClass = async (unitId) => {
+    if (!selectedTrimester) return;
+    setGeneratingUnit(unitId);
+    try {
+      await api.post('/classes', { unit_id: unitId, trimester_id: selectedTrimester });
+      setToast({ message: 'Class generated successfully', type: 'success' });
+      loadUnits();
+      loadClasses();
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setToast({ message: 'Classes already exist for this unit', type: 'error' });
+      } else {
+        setToast({ message: err.response?.data?.error || 'Failed to generate class', type: 'error' });
+      }
+    } finally {
+      setGeneratingUnit(null);
+    }
+  };
+
+  const handleGenerateAllClasses = async () => {
+    if (!selectedTrimester) return;
+    setLoading(true);
+    try {
+      const body = { trimester_id: selectedTrimester };
+      if (selectedDegree) body.degree_id = selectedDegree;
+      
+      const res = await api.post('/classes/batch', body);
+      setToast({ message: res.data.message, type: 'success' });
+      loadUnits();
+      loadClasses();
+    } catch (err) {
+      setToast({ message: err.response?.data?.error || 'Failed to generate classes', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getUnitClasses = (unitId) => {
+    return classes.filter(c => c.unit_id === unitId);
+  };
+
+  const hasClassesForUnit = (unitId) => {
+    return classes.some(c => c.unit_id === unitId);
+  };
+
+  const isUnitForSelectedDegree = (unit) => {
+    if (!selectedDegree) return true;
+    return (unit.degrees || []).some(d => d.id === parseInt(selectedDegree));
   };
 
   const handleEntryClick = (entry) => {
@@ -152,7 +198,7 @@ export default function TimetableManager() {
       end_time: entry.end_time?.substring(0, 5),
       create_recurring: entry.is_recurring
     });
-    setShowModal(true);
+    setShowScheduleModal(true);
   };
 
   const handleScheduleSubmit = async (e) => {
@@ -175,12 +221,13 @@ export default function TimetableManager() {
         setToast({ message: 'Class scheduled successfully', type: 'success' });
       }
 
-      setShowModal(false);
-      loadTimetableData();
+      setShowScheduleModal(false);
+      loadScheduledEntries();
     } catch (e) {
       const conflicts = e.response?.data?.conflicts;
       if (conflicts?.length > 0) {
-        setToast({ message: `Conflict: ${conflicts[0].message}`, type: 'error' });
+        const conflictMsgs = conflicts.map(c => c.message).join('; ');
+        setToast({ message: `Conflict: ${conflictMsgs}`, type: 'error' });
       } else {
         setToast({ message: e.response?.data?.error || 'Failed to save', type: 'error' });
       }
@@ -194,37 +241,55 @@ export default function TimetableManager() {
     try {
       await api.delete(`/timetable/${editingEntry.id}`);
       setToast({ message: 'Entry deleted', type: 'success' });
-      setShowModal(false);
-      loadTimetableData();
+      setShowScheduleModal(false);
+      loadScheduledEntries();
     } catch {
       setToast({ message: 'Delete failed', type: 'error' });
     }
   };
 
-  const getEntriesForClassroom = (classroomId) => {
-    return scheduledEntries.filter(entry => {
-      if (entry.classroom_id !== classroomId) return false;
-      if (selectedDay && entry.day_of_week !== selectedDay) return false;
-      return true;
-    });
+  const handleKanbanDragEnd = async (result) => {
+    const { source, destination, draggableId } = result;
+    
+    if (!destination) return;
+
+    if (source.droppableId === 'class-pool' && destination.droppableId.startsWith('slot-')) {
+      const classId = draggableId.replace('pool-', '');
+      const classData = classes.find(c => c.id === parseInt(classId));
+      if (!classData) return;
+
+      const [day, time] = destination.droppableId.replace('slot-', '').split('|');
+      const duration = classData.duration || 1;
+      const [hours, mins] = time.split(':').map(Number);
+      const endHours = hours + duration;
+
+      setScheduleForm({
+        class_id: classData.id,
+        unit_id: classData.unit_id,
+        classroom_id: '',
+        tutor_id: '',
+        day_of_week: day,
+        start_time: time,
+        end_time: `${endHours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`,
+        create_recurring: true
+      });
+      setEditingEntry(null);
+      setShowScheduleModal(true);
+    }
   };
 
-  const calculateCardStyle = (entry) => {
-    const startParts = entry.start_time.split(':');
-    const endParts = entry.end_time.split(':');
-    const startMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
-    const endMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
-    const baseOffset = 8 * 60;
-    const startSlot = (startMinutes - baseOffset) / 30;
-    const durationSlots = (endMinutes - startMinutes) / 30;
-    const slotHeight = 48;
-    return { top: startSlot * slotHeight, height: durationSlots * slotHeight - 4 };
-  };
+  const scheduledClasses = classes.filter(cls => 
+    scheduledEntries.some(entry => entry.class_id === cls.id)
+  );
 
-  const groupedClasses = unscheduledClasses.reduce((acc, cls) => {
-    const key = cls.unit_code || 'Unknown';
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(cls);
+  const unscheduledClasses = classes.filter(cls => 
+    !scheduledEntries.some(entry => entry.class_id === cls.id)
+  );
+
+  const groupedScheduled = scheduledEntries.reduce((acc, entry) => {
+    const day = entry.day_of_week;
+    if (!acc[day]) acc[day] = [];
+    acc[day].push(entry);
     return acc;
   }, {});
 
@@ -234,10 +299,10 @@ export default function TimetableManager() {
 
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-surface-900" style={{ fontFamily: 'var(--font-heading)' }}>
-          📅 Timetable Manager
+          Timetable Manager
         </h2>
         <button 
-          onClick={() => loadTimetableData()} 
+          onClick={() => { loadUnits(); loadClasses(); loadScheduledEntries(); }} 
           className="btn btn-sm btn-secondary"
           disabled={loading}
         >
@@ -246,13 +311,13 @@ export default function TimetableManager() {
       </div>
 
       <div className="bg-white rounded-lg border border-surface-200 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="form-group">
             <label className="form-label">Degree</label>
             <select 
               className="form-select" 
               value={selectedDegree} 
-              onChange={e => setSelectedDegree(e.target.value)}
+              onChange={e => handleDegreeChange(e.target.value)}
             >
               <option value="">All Degrees</option>
               {degrees.map(d => (
@@ -265,7 +330,7 @@ export default function TimetableManager() {
             <select 
               className="form-select" 
               value={selectedTrimester} 
-              onChange={e => setSelectedTrimester(e.target.value)}
+              onChange={e => handleTrimesterChange(e.target.value)}
             >
               <option value="">Select trimester...</option>
               {trimesters.map(t => (
@@ -273,225 +338,155 @@ export default function TimetableManager() {
               ))}
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label">Day</label>
-            <select 
-              className="form-select" 
-              value={selectedDay} 
-              onChange={e => setSelectedDay(e.target.value)}
-            >
-              <option value="">All Days</option>
-              {DAYS.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input 
-              type="date" 
-              className="form-input" 
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-            />
-          </div>
         </div>
       </div>
 
       {!selectedTrimester ? (
         <div className="bg-white rounded-lg border border-surface-200 p-12 text-center">
           <div className="text-4xl mb-3">📋</div>
-          <p className="text-surface-500">Select a trimester to manage the timetable</p>
+          <p className="text-surface-500">Select a degree and trimester to manage the timetable</p>
         </div>
       ) : loading ? (
         <div className="bg-white rounded-lg border border-surface-200 p-12 text-center text-surface-400">
-          Loading timetable...
+          Loading...
         </div>
       ) : (
-        <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex gap-4">
-            <div className="w-72 flex-shrink-0">
-              <Droppable droppableId="class-pool" direction="vertical">
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={`bg-white rounded-lg border border-surface-200 p-4 ${snapshot.isDraggingOver ? 'bg-blue-50' : ''}`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-sm text-surface-900">Unscheduled Classes</h3>
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded">{unscheduledClasses.length}</span>
-                    </div>
-                    
-                    {unscheduledClasses.length === 0 ? (
-                      <div className="text-center py-6 text-surface-400 text-sm">
-                        No unscheduled classes
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                        {Object.entries(groupedClasses).map(([unitCode, unitClasses]) => (
-                          <div key={unitCode} className="mb-4">
-                            <div className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-1.5 px-1">
-                              {unitCode}
-                            </div>
-                            {unitClasses.map((cls, index) => {
-                              const colors = cls.required_room_type === 'lab' 
-                                ? { bg: 'bg-amber-50', border: 'border-amber-300', badge: 'bg-amber-200 text-amber-800' }
-                                : { bg: 'bg-blue-50', border: 'border-blue-300', badge: 'bg-blue-200 text-blue-800' };
-                              return (
-                                <Draggable key={cls.id} draggableId={`pool-${cls.id}`} index={index}>
-                                  {(provided, snapshot) => (
-                                    <div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      className={`border rounded-md p-3 mb-2 cursor-grab transition-all ${colors.bg} ${colors.border} ${
-                                        snapshot.isDragging ? 'shadow-lg rotate-2 scale-[1.02]' : 'hover:shadow-md'
-                                      }`}
-                                      onClick={() => {
-                                        const duration = cls.duration || 1;
-                                        setScheduleForm({
-                                          class_id: cls.id,
-                                          unit_id: cls.unit_id,
-                                          classroom_id: '',
-                                          tutor_id: '',
-                                          day_of_week: selectedDay || 'Monday',
-                                          start_time: '09:00',
-                                          end_time: `${(9 + duration).toString().padStart(2, '0')}:00`,
-                                          create_recurring: true
-                                        });
-                                        setEditingEntry(null);
-                                        setShowModal(true);
-                                      }}
-                                    >
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${colors.badge}`}>
-                                          {cls.required_room_type?.toUpperCase() || 'NORMAL'}
-                                        </span>
-                                        <span className="font-semibold text-xs text-surface-900">
-                                          {cls.group_name || 'Group'}
-                                        </span>
-                                      </div>
-                                      <div className="text-xs text-surface-700 font-medium">
-                                        {cls.unit_name || 'Unknown Unit'}
-                                      </div>
-                                      <div className="flex items-center gap-3 mt-2 text-[10px] text-surface-500">
-                                        <span>⏱ {cls.duration || 1}h</span>
-                                        <span>👥 {cls.max_capacity || 0}</span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </Draggable>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
+        <>
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-surface-900">Units</h3>
+              <button 
+                onClick={handleGenerateAllClasses}
+                className="btn btn-primary btn-sm"
+                disabled={loading || units.every(u => hasClassesForUnit(u.id))}
+              >
+                Generate Classes for All Units
+              </button>
             </div>
-
-            <div className="flex-1 overflow-x-auto">
-              <div className="bg-white rounded-lg border border-surface-200 overflow-hidden">
-                <div className="min-w-[900px]">
-                  <div className="flex">
-                    <div className="w-20 flex-shrink-0 bg-surface-100">
-                      <div className="h-14 border-b border-surface-200" />
-                      {TIME_SLOTS.map(slot => (
-                        <div 
-                          key={slot} 
-                          className="h-12 flex items-center justify-end pr-3 text-xs text-surface-500 font-medium border-b border-r border-surface-200"
-                        >
-                          {slot}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {units.map(unit => {
+                const isForDegree = isUnitForSelectedDegree(unit);
+                const hasClasses = hasClassesForUnit(unit.id);
+                const unitClasses = getUnitClasses(unit.id);
+                const otherDegrees = (unit.degrees || []).filter(d => d.id !== parseInt(selectedDegree));
+                
+                return (
+                  <div 
+                    key={unit.id}
+                    className={`card ${!isForDegree ? 'opacity-50' : ''} ${hasClasses ? 'border-green-300 bg-green-50/30' : ''}`}
+                  >
+                    <div className="card-body">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className="badge bg-[#e6eeff] text-[#0044a3] text-xs">{unit.code}</span>
+                          <h4 className="font-semibold text-surface-900 mt-1">{unit.name}</h4>
                         </div>
-                      ))}
-                    </div>
-
-                    {classrooms.map(classroom => {
-                      const colors = ROOM_TYPE_COLORS[classroom.type] || ROOM_TYPE_COLORS.normal;
-                      const classroomEntries = getEntriesForClassroom(classroom.id);
+                        <span className={`badge ${unit.classroom_type === 'lab' ? 'badge-warning' : 'badge-primary'} text-xs`}>
+                          {unit.classroom_type === 'lab' ? 'Lab' : 'Normal'}
+                        </span>
+                      </div>
                       
-                      return (
-                        <Droppable key={classroom.id} droppableId={`classroom-${classroom.id}`}>
-                          {(provided, snapshot) => (
-                            <div 
-                              ref={provided.innerRef}
-                              {...provided.droppableProps}
-                              className={`flex-1 min-w-[180px] relative ${snapshot.isDraggingOver ? 'bg-green-50' : ''}`}
-                            >
-                              <div className={`h-14 border-b border-surface-200 flex items-center justify-center ${colors.header}`}>
-                                <div className="text-center">
-                                  <div className="font-bold text-sm text-surface-900">{classroom.room_number || 'Room'}</div>
-                                  <div className="text-[10px] text-surface-500">{classroom.location || 'N/A'}</div>
-                                </div>
-                              </div>
-
-                              {TIME_SLOTS.map((slot, i) => (
-                                <div 
-                                  key={slot} 
-                                  className={`h-12 border-b border-r border-surface-200 ${i % 2 === 0 ? 'bg-white' : 'bg-surface-50/50'}`}
-                                />
-                              ))}
-
-                              {classroomEntries.map((entry) => {
-                                const { top, height } = calculateCardStyle(entry);
-                                const dayColor = DAY_COLORS[entry.day_of_week] || '#6366f1';
-                                const colors = ROOM_TYPE_COLORS[entry.room_type] || ROOM_TYPE_COLORS.normal;
-                                
-                                return (
-                                  <div
-                                    key={entry.id}
-                                    className={`absolute left-1 right-1 rounded-md p-2 cursor-pointer hover:shadow-lg overflow-hidden ${colors.card}`}
-                                    style={{
-                                      height: `${height}px`,
-                                      top: `${top + 56}px`,
-                                      borderLeft: `4px solid ${dayColor}`,
-                                    }}
-                                    onClick={() => handleEntryClick(entry)}
-                                  >
-                                    <div className="flex items-start justify-between mb-1">
-                                      <span className="font-bold text-[11px] text-surface-900">
-                                        {entry.unit_code || '---'}
-                                      </span>
-                                      {entry.is_recurring && (
-                                        <span className="text-[8px]">🔄</span>
-                                      )}
-                                    </div>
-                                    <div className="text-[10px] text-surface-700 font-medium truncate">
-                                      {entry.unit_name || 'Unknown'}
-                                    </div>
-                                    <div className="text-[9px] text-surface-500 mt-1">
-                                      {entry.group_name || 'Group'} • {entry.day_of_week?.substring(0, 3) || 'Mon'}
-                                    </div>
-                                    <div className="text-[9px] text-surface-400">
-                                      {entry.start_time?.substring(0,5) || '00:00'} - {entry.end_time?.substring(0,5) || '00:00'}
-                                    </div>
-                                    <div className="text-[9px] text-surface-500 truncate mt-0.5">
-                                      {entry.tutor_name || 'No tutor'}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      );
-                    })}
+                      {otherDegrees.length > 0 && (
+                        <div className="text-xs text-surface-500 mb-2">
+                          Also used in: {otherDegrees.map(d => d.code).join(', ')}
+                        </div>
+                      )}
+                      
+                      <div className="text-xs text-surface-600 mb-3">
+                        <span>Est. students: {unit.total_students}</span>
+                        <span className="mx-2">•</span>
+                        <span>{unit.class_duration}h class</span>
+                        {hasClasses && (
+                          <>
+                            <span className="mx-2">•</span>
+                            <span className="text-success font-medium">{unitClasses.length} class{unitClasses.length > 1 ? 'es' : ''}</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {hasClasses ? (
+                        <div className="flex items-center gap-2 text-sm text-success">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Class Generated</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleGenerateClass(unit.id)}
+                          className="btn btn-primary btn-sm w-full"
+                          disabled={generatingUnit === unit.id || !isForDegree}
+                        >
+                          {generatingUnit === unit.id ? 'Generating...' : 'Generate Class'}
+                        </button>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+              
+              {units.length === 0 && (
+                <div className="col-span-full text-center py-8 text-surface-500">
+                  No units found for this selection
                 </div>
-              </div>
+              )}
             </div>
           </div>
-        </DragDropContext>
+
+          {scheduledClasses.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-surface-900 mb-4">Scheduled Classes</h3>
+              <KanbanBoard 
+                data={groupedScheduled} 
+                onCardClick={handleEntryClick}
+                readOnly={true}
+              />
+            </div>
+          )}
+
+          {unscheduledClasses.length > 0 && (
+            <div className="bg-white rounded-lg border border-surface-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-surface-900">Unscheduled Classes</h3>
+                <span className="badge badge-warning">{unscheduledClasses.length}</span>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {unscheduledClasses.map(cls => (
+                  <div
+                    key={cls.id}
+                    className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-blue-100 transition-colors"
+                    onClick={() => {
+                      const duration = cls.duration || 1;
+                      setScheduleForm({
+                        class_id: cls.id,
+                        unit_id: cls.unit_id,
+                        classroom_id: '',
+                        tutor_id: '',
+                        day_of_week: 'Monday',
+                        start_time: '09:00',
+                        end_time: `${(9 + duration).toString().padStart(2, '0')}:00`,
+                        create_recurring: true
+                      });
+                      setEditingEntry(null);
+                      setShowScheduleModal(true);
+                    }}
+                  >
+                    <span className="text-xs font-semibold text-blue-800">{cls.unit_code}</span>
+                    <span className="text-xs text-blue-600">{cls.group_name}</span>
+                    <span className="text-xs text-blue-400">({cls.duration}h)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <Modal 
-        isOpen={showModal} 
-        onClose={() => setShowModal(false)} 
+        isOpen={showScheduleModal} 
+        onClose={() => setShowScheduleModal(false)} 
         title={editingEntry ? 'Edit Timetable Entry' : 'Schedule Class'}
         size="lg"
       >
@@ -590,7 +585,7 @@ export default function TimetableManager() {
                 Delete
               </button>
             )}
-            <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowScheduleModal(false)} className="btn btn-secondary">
               Cancel
             </button>
           </div>

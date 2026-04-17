@@ -10,6 +10,7 @@ const roleCheck = require('../middleware/roleCheck');
 
 router.get('/', authenticateToken, classController.getAll);
 router.get('/unscheduled', authenticateToken, classController.getUnscheduled);
+router.get('/by-unit', authenticateToken, classController.getByUnitAndTrimester);
 router.get('/:id', authenticateToken, classController.getById);
 router.post('/', authenticateToken, roleCheck('admin'), classController.createForUnit);
 router.post('/batch', authenticateToken, roleCheck('admin'), classController.createBatchForTrimester);

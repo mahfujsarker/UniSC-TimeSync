@@ -207,9 +207,23 @@
     @apply bg-surface-50 text-brand-blue border-l-brand-blue font-semibold;
   }
 
+  /* Card Styles */
+  .card {
+    @apply bg-white rounded-lg border border-surface-200 shadow-sm transition-all duration-200;
+  }
+  .card:hover {
+    @apply shadow-md border-surface-300;
+  }
+  .card-body {
+    @apply p-4;
+  }
+
   /* Badge */
   .badge {
     @apply inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-sm uppercase tracking-wide;
+  }
+  .badge-info {
+    @apply bg-[#e6f4ea] text-[#0052c4];
   }
   .badge-primary {
     @apply bg-[#e6eeff] text-[#0044a3];

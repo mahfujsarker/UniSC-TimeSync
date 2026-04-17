@@ -8,6 +8,7 @@ const authenticateToken = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 
 router.get('/', authenticateToken, controller.getAll);
+router.get('/by-degree', authenticateToken, controller.getByDegreeAndTrimester);
 router.get('/by-degree/:degreeId', authenticateToken, controller.getByDegree);
 router.get('/:id', authenticateToken, controller.getById);
 router.post('/', authenticateToken, roleCheck('admin'), controller.create);

@@ -7,7 +7,7 @@ const pool = require('../config/db');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
-  const excludeClause = excludeId ? ' AND te.id != $5' : '';
+  const excludeClause = excludeId ? ' AND te.id != $6' : '';
   
   const roomParams = [classroom_id, day_of_week, start_time, end_time];
   if (excludeId) roomParams.push(excludeId);
@@ -28,7 +28,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
     const c = roomConflict.rows[0];
     conflicts.push({
       type: 'classroom',
-      message: `Room ${c.room_number} is already booked for ${c.unit_name} (${c.unit_code}) from ${c.start_time} to ${c.end_time}`,
+      message: `CLASSROOM CONFLICT: Room ${c.room_number} is already booked for ${c.unit_name} (${c.unit_code}) on ${c.day_of_week} from ${c.start_time} to ${c.end_time}`,
       existing: c
     });
   }
@@ -52,7 +52,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
     const c = tutorConflict.rows[0];
     conflicts.push({
       type: 'tutor',
-      message: `Tutor ${c.tutor_name} is already assigned to ${c.unit_name} (${c.unit_code}) from ${c.start_time} to ${c.end_time}`,
+      message: `TUTOR CONFLICT: Tutor ${c.tutor_name} is already assigned to ${c.unit_name} (${c.unit_code}) on ${c.day_of_week} from ${c.start_time} to ${c.end_time}`,
       existing: c
     });
   }
@@ -60,7 +60,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
   if (class_id) {
     const classParams = [class_id, day_of_week, start_time, end_time];
     if (excludeId) classParams.push(excludeId);
-    const classExcludeClause = excludeId ? ' AND te.id != $5' : '';
+    const classExcludeClause = excludeId ? ' AND te.id != $6' : '';
     
     const classConflict = await pool.query(
       `SELECT te.*, u.name as unit_name, u.code as unit_code, cl.group_name
@@ -78,7 +78,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
       const c = classConflict.rows[0];
       conflicts.push({
         type: 'class',
-        message: `${c.unit_name} ${c.group_name} is already scheduled from ${c.start_time} to ${c.end_time}`,
+        message: `UNIT CONFLICT: ${c.unit_name} ${c.group_name} is already scheduled on ${c.day_of_week} from ${c.start_time} to ${c.end_time}`,
         existing: c
       });
     }

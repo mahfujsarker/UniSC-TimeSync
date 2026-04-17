@@ -1,6 +1,6 @@
 /**
  * Class Controller
- * Manages class instances that are auto-generated based on unit capacity.
+ * Manages class instances generated based on unit capacity.
  */
 const pool = require('../config/db');
 
@@ -11,7 +11,7 @@ const ROOM_CAPACITIES = {
 
 function calculateNumberOfClasses(totalStudents, roomType) {
   const capacity = ROOM_CAPACITIES[roomType] || 30;
-  return Math.ceil(totalStudents / capacity);
+  return Math.max(1, Math.ceil(totalStudents / capacity));
 }
 
 function generateGroupNames(numClasses) {
@@ -91,6 +91,37 @@ async function getById(req, res) {
   }
 }
 
+async function getByUnitAndTrimester(req, res) {
+  try {
+    const { unit_id, trimester_id } = req.query;
+    
+    if (!unit_id || !trimester_id) {
+      return res.status(400).json({ error: 'unit_id and trimester_id are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT c.*, 
+              u.name as unit_name, u.code as unit_code,
+              (SELECT COUNT(*) FROM timetable_entries te WHERE te.class_id = c.id AND te.is_recurring = true) as is_scheduled
+       FROM classes c
+       JOIN units u ON c.unit_id = u.id
+       WHERE c.unit_id = $1 AND c.trimester_id = $2
+       ORDER BY c.group_name`,
+      [unit_id, trimester_id]
+    );
+
+    res.json({
+      unit_id,
+      trimester_id,
+      classes: result.rows,
+      has_classes: result.rows.length > 0
+    });
+  } catch (err) {
+    console.error('Error fetching classes by unit and trimester:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 async function getUnscheduled(req, res) {
   try {
     const { trimester_id, degree_id } = req.query;
@@ -146,6 +177,17 @@ async function createForUnit(req, res) {
     }
     const unit = unitResult.rows[0];
 
+    const existingClasses = await client.query(
+      'SELECT * FROM classes WHERE unit_id = $1 AND trimester_id = $2',
+      [unit_id, trimester_id]
+    );
+    if (existingClasses.rows.length > 0) {
+      return res.status(409).json({ 
+        error: 'Classes already exist for this unit and trimester',
+        existing_classes: existingClasses.rows
+      });
+    }
+
     const numClasses = calculateNumberOfClasses(unit.total_students, unit.classroom_type);
     const groupNames = generateGroupNames(numClasses);
     const capacity = ROOM_CAPACITIES[unit.classroom_type] || 30;
@@ -157,8 +199,6 @@ async function createForUnit(req, res) {
       const result = await client.query(
         `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (unit_id, trimester_id, group_name) DO UPDATE SET
-           max_capacity = $6, duration = $5, updated_at = NOW()
          RETURNING *`,
         [unit_id, trimester_id, groupName, unit.classroom_type, unit.class_duration, capacity]
       );
@@ -194,7 +234,9 @@ async function createBatchForTrimester(req, res) {
     await client.query('BEGIN');
 
     let unitQuery = `
-      SELECT u.* FROM units u
+      SELECT u.*, 
+             EXISTS(SELECT 1 FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1) as has_existing_classes
+      FROM units u
       JOIN unit_trimesters ut ON u.id = ut.unit_id
       WHERE ut.trimester_id = $1
     `;
@@ -206,37 +248,48 @@ async function createBatchForTrimester(req, res) {
     }
 
     const unitsResult = await client.query(unitQuery, params);
-    const allCreatedClasses = [];
+    
     const results = [];
+    let totalGenerated = 0;
 
     for (const unit of unitsResult.rows) {
+      if (unit.has_existing_classes) {
+        results.push({
+          unit_id: unit.id,
+          unit_name: unit.name,
+          unit_code: unit.code,
+          status: 'already_exists',
+          classes_created: 0
+        });
+        continue;
+      }
+
       const numClasses = calculateNumberOfClasses(unit.total_students, unit.classroom_type);
       const groupNames = generateGroupNames(numClasses);
       const capacity = ROOM_CAPACITIES[unit.classroom_type] || 30;
 
       for (const groupName of groupNames) {
-        const result = await client.query(
+        await client.query(
           `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (unit_id, trimester_id, group_name) DO UPDATE SET
-             max_capacity = $6, duration = $5, updated_at = NOW()
-           RETURNING *`,
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [unit.id, trimester_id, groupName, unit.classroom_type, unit.class_duration, capacity]
         );
-        allCreatedClasses.push(result.rows[0]);
+        totalGenerated++;
       }
 
       results.push({
         unit_id: unit.id,
         unit_name: unit.name,
         unit_code: unit.code,
+        status: 'generated',
         classes_created: numClasses
       });
     }
 
     await client.query('COMMIT');
     res.status(201).json({
-      message: `Generated ${allCreatedClasses.length} classes across ${results.length} units`,
+      message: `Generated ${totalGenerated} classes across ${results.filter(r => r.status === 'generated').length} units`,
+      total_generated: totalGenerated,
       results
     });
   } catch (err) {
@@ -310,6 +363,7 @@ async function removeByUnit(req, res) {
 module.exports = {
   getAll,
   getById,
+  getByUnitAndTrimester,
   getUnscheduled,
   createForUnit,
   createBatchForTrimester,
