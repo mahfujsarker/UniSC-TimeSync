@@ -165,7 +165,7 @@ async function getUnscheduled(req, res) {
 async function createForUnit(req, res) {
   const client = await pool.connect();
   try {
-    const { unit_id, trimester_id } = req.body;
+    const { unit_id, trimester_id, group_name, required_room_type, duration, max_capacity } = req.body;
     
     if (!unit_id || !trimester_id) {
       return res.status(400).json({ error: 'unit_id and trimester_id are required' });
@@ -177,45 +177,40 @@ async function createForUnit(req, res) {
     }
     const unit = unitResult.rows[0];
 
-    const existingClasses = await client.query(
-      'SELECT * FROM classes WHERE unit_id = $1 AND trimester_id = $2',
-      [unit_id, trimester_id]
-    );
-    if (existingClasses.rows.length > 0) {
-      return res.status(409).json({ 
-        error: 'Classes already exist for this unit and trimester',
-        existing_classes: existingClasses.rows
-      });
-    }
-
-    const numClasses = calculateNumberOfClasses(unit.total_students, unit.classroom_type);
-    const groupNames = generateGroupNames(numClasses);
-    const capacity = ROOM_CAPACITIES[unit.classroom_type] || 30;
+    const roomType = required_room_type || unit.classroom_type;
+    const classDuration = duration || unit.class_duration;
+    const capacity = max_capacity || (roomType === 'lab' ? 25 : 30);
+    const name = group_name || 'Group A';
 
     await client.query('BEGIN');
 
-    const createdClasses = [];
-    for (const groupName of groupNames) {
+    const existingResult = await client.query(
+      'SELECT * FROM classes WHERE unit_id = $1 AND trimester_id = $2 AND group_name = $3',
+      [unit_id, trimester_id, name]
+    );
+
+    let createdClass;
+    if (existingResult.rows.length > 0) {
+      await client.query(
+        `UPDATE classes SET required_room_type = $1, duration = $2, max_capacity = $3, updated_at = NOW() WHERE id = $4`,
+        [roomType, classDuration, capacity, existingResult.rows[0].id]
+      );
+      createdClass = existingResult.rows[0];
+    } else {
       const result = await client.query(
         `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [unit_id, trimester_id, groupName, unit.classroom_type, unit.class_duration, capacity]
+        [unit_id, trimester_id, name, roomType, classDuration, capacity]
       );
-      createdClasses.push(result.rows[0]);
+      createdClass = result.rows[0];
     }
 
     await client.query('COMMIT');
-    res.status(201).json({
-      message: `${createdClasses.length} class(es) generated`,
-      unit_name: unit.name,
-      total_students: unit.total_students,
-      room_type: unit.classroom_type,
-      classes: createdClasses
-    });
+    res.status(201).json(createdClass);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error creating classes:', err);
+    console.error('Error creating class:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
