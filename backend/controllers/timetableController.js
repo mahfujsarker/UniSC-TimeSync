@@ -7,7 +7,12 @@ const pool = require('../config/db');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
-  const excludeClause = excludeId ? ' AND te.id != $6' : '';
+  
+  if (!classroom_id || !day_of_week || !start_time || !end_time) {
+    return conflicts;
+  }
+  
+  const excludeClause = excludeId ? ' AND te.id != $5' : '';
   
   const roomParams = [classroom_id, day_of_week, start_time, end_time];
   if (excludeId) roomParams.push(excludeId);
@@ -33,8 +38,10 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
     });
   }
 
-  const tutorParams = [tutor_id, day_of_week, start_time, end_time];
-  if (excludeId) tutorParams.push(excludeId);
+  const tutorParams = typeof excludeId !== 'undefined' && excludeId !== null 
+    ? [tutor_id, day_of_week, start_time, end_time, excludeId]
+    : [tutor_id, day_of_week, start_time, end_time];
+  const tutorExcludeClause = (typeof excludeId !== 'undefined' && excludeId !== null) ? ' AND te.id != $5' : '';
   
   const tutorConflict = await pool.query(
     `SELECT te.*, u.name as unit_name, u.code as unit_code, t.name as tutor_name
@@ -45,7 +52,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
        AND te.day_of_week = $2
        AND te.start_time < $4 
        AND te.end_time > $3
-       ${excludeClause}`,
+       ${tutorExcludeClause}`,
     tutorParams
   );
   if (tutorConflict.rows.length > 0) {
@@ -58,9 +65,10 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
   }
 
   if (class_id) {
-    const classParams = [class_id, day_of_week, start_time, end_time];
-    if (excludeId) classParams.push(excludeId);
-    const classExcludeClause = excludeId ? ' AND te.id != $6' : '';
+    const classParams = typeof excludeId !== 'undefined' && excludeId !== null
+      ? [class_id, day_of_week, start_time, end_time, excludeId]
+      : [class_id, day_of_week, start_time, end_time];
+    const classExcludeClause = (typeof excludeId !== 'undefined' && excludeId !== null) ? ' AND te.id != $5' : '';
     
     const classConflict = await pool.query(
       `SELECT te.*, u.name as unit_name, u.code as unit_code, cl.group_name
@@ -430,21 +438,30 @@ async function update(req, res) {
       });
     }
 
+    const updates = [];
+    const params = [];
+    let paramCount = 1;
+
+    if (class_id !== undefined) { params.push(class_id); updates.push(`class_id = $${paramCount++}`); }
+    if (unit_id !== undefined) { params.push(unit_id); updates.push(`unit_id = $${paramCount++}`); }
+    if (classroom_id !== undefined) { params.push(classroom_id); updates.push(`classroom_id = $${paramCount++}`); }
+    if (tutor_id !== undefined) { params.push(tutor_id); updates.push(`tutor_id = $${paramCount++}`); }
+    if (trimester_id !== undefined) { params.push(trimester_id); updates.push(`trimester_id = $${paramCount++}`); }
+    if (day_of_week !== undefined) { params.push(day_of_week); updates.push(`day_of_week = $${paramCount++}`); }
+    if (start_time !== undefined) { params.push(start_time); updates.push(`start_time = $${paramCount++}`); }
+    if (end_time !== undefined) { params.push(end_time); updates.push(`end_time = $${paramCount++}`); }
+    if (is_recurring !== undefined) { params.push(is_recurring); updates.push(`is_recurring = $${paramCount++}`); }
+    if (week_number !== undefined) { params.push(week_number); updates.push(`week_number = $${paramCount++}`); }
+
+    params.push(id);
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
     const result = await pool.query(
-      `UPDATE timetable_entries SET 
-        class_id = COALESCE($1, class_id),
-        unit_id = COALESCE($2, unit_id),
-        classroom_id = COALESCE($3, classroom_id),
-        tutor_id = COALESCE($4, tutor_id),
-        trimester_id = COALESCE($5, trimester_id),
-        day_of_week = COALESCE($6, day_of_week),
-        start_time = COALESCE($7, start_time),
-        end_time = COALESCE($8, end_time),
-        is_recurring = COALESCE($9, is_recurring),
-        week_number = $10,
-        updated_at = NOW()
-       WHERE id = $11 RETURNING *`,
-      [class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, is_recurring, week_number, id]
+      `UPDATE timetable_entries SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramCount} RETURNING *`,
+      params
     );
     res.json(result.rows[0]);
   } catch (err) {

@@ -10,14 +10,14 @@ async function getAll(req, res) {
     
     let query = `
       SELECT u.*,
-             COALESCE(json_agg(ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
-             COALESCE(json_agg(
-               json_build_object('id', d.id, 'code', d.code, 'name', d.name)
+             COALESCE(jsonb_agg(DISTINCT ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
+             COALESCE(jsonb_agg(DISTINCT
+                jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)
              ) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees
-       FROM units u
-       LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
-       LEFT JOIN degrees d ON ud.degree_id = d.id
-       LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
+      FROM units u
+      LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
+      LEFT JOIN degrees d ON ud.degree_id = d.id
+      LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
     `;
     const params = [];
     const conditions = [];
@@ -51,9 +51,9 @@ async function getById(req, res) {
     const { id } = req.params;
     const result = await pool.query(
       `SELECT u.*,
-              COALESCE(json_agg(ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
-              COALESCE(json_agg(
-                json_build_object('id', d.id, 'code', d.code, 'name', d.name)
+              COALESCE(jsonb_agg(DISTINCT ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
+              COALESCE(jsonb_agg(DISTINCT
+                jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)
               ) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees
        FROM units u 
        LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
@@ -96,24 +96,29 @@ async function getByDegreeAndTrimester(req, res) {
   try {
     const { degree_id, trimester_id } = req.query;
     
+    if (!trimester_id) {
+      return res.status(400).json({ error: 'trimester_id is required' });
+    }
+    
     let query = `
       SELECT u.*,
-             COALESCE(json_agg(DISTINCT jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees,
-             COALESCE(json_agg(DISTINCT ut2.trimester_id) FILTER (WHERE ut2.trimester_id IS NOT NULL), '[]') as trimester_ids,
+             COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees,
+             COALESCE(jsonb_agg(DISTINCT ut2.trimester_id) FILTER (WHERE ut2.trimester_id IS NOT NULL), '[]') as trimester_ids,
              COALESCE(
-               (SELECT json_agg(jsonb_build_object('id', c.id, 'group_name', c.group_name, 'duration', c.duration, 'max_capacity', c.max_capacity, 'required_room_type', c.required_room_type))
-                FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $2), '[]'
+               (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'group_name', c.group_name, 'duration', c.duration, 'max_capacity', c.max_capacity, 'required_room_type', c.required_room_type))
+                FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1), '[]'
              ) as classes
       FROM units u
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
       JOIN unit_trimesters ut2 ON u.id = ut2.unit_id
-      WHERE ut2.trimester_id = $2
+      WHERE ut2.trimester_id = $1
     `;
-    const params = [degree_id, trimester_id];
+    const params = [trimester_id];
     
     if (degree_id) {
-      query += ` AND ud.degree_id = $1`;
+      params.push(degree_id);
+      query += ` AND ud.degree_id = $2`;
     }
     
     query += ` GROUP BY u.id ORDER BY u.code ASC`;
