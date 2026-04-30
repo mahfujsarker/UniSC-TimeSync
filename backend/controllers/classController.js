@@ -165,8 +165,8 @@ async function getUnscheduled(req, res) {
 async function createForUnit(req, res) {
   const client = await pool.connect();
   try {
-    const { unit_id, trimester_id, group_name, required_room_type, duration, max_capacity } = req.body;
-    
+    const { unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students } = req.body;
+
     if (!unit_id || !trimester_id) {
       return res.status(400).json({ error: 'unit_id and trimester_id are required' });
     }
@@ -181,6 +181,7 @@ async function createForUnit(req, res) {
     const classDuration = duration || unit.class_duration;
     const capacity = max_capacity || (roomType === 'lab' ? 25 : 30);
     const name = group_name || 'Group A';
+    const enrolled = enrolled_students || 0;
 
     await client.query('BEGIN');
 
@@ -192,16 +193,16 @@ async function createForUnit(req, res) {
     let createdClass;
     if (existingResult.rows.length > 0) {
       await client.query(
-        `UPDATE classes SET required_room_type = $1, duration = $2, max_capacity = $3, updated_at = NOW() WHERE id = $4`,
-        [roomType, classDuration, capacity, existingResult.rows[0].id]
+        `UPDATE classes SET required_room_type = $1, duration = $2, max_capacity = $3, enrolled_students = $4, updated_at = NOW() WHERE id = $5`,
+        [roomType, classDuration, capacity, enrolled, existingResult.rows[0].id]
       );
       createdClass = existingResult.rows[0];
     } else {
       const result = await client.query(
-        `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [unit_id, trimester_id, name, roomType, classDuration, capacity]
+        [unit_id, trimester_id, name, roomType, classDuration, capacity, enrolled]
       );
       createdClass = result.rows[0];
     }
@@ -221,7 +222,7 @@ async function createBatchForTrimester(req, res) {
   const client = await pool.connect();
   try {
     const { trimester_id, degree_id } = req.body;
-    
+
     if (!trimester_id) {
       return res.status(400).json({ error: 'trimester_id is required' });
     }
@@ -229,21 +230,21 @@ async function createBatchForTrimester(req, res) {
     await client.query('BEGIN');
 
     let unitQuery = `
-      SELECT u.*, 
+      SELECT u.*,
              EXISTS(SELECT 1 FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1) as has_existing_classes
       FROM units u
       JOIN unit_trimesters ut ON u.id = ut.unit_id
       WHERE ut.trimester_id = $1
     `;
     const params = [trimester_id];
-    
+
     if (degree_id) {
       unitQuery += ' AND EXISTS (SELECT 1 FROM unit_degrees ud WHERE ud.unit_id = u.id AND ud.degree_id = $2)';
       params.push(degree_id);
     }
 
     const unitsResult = await client.query(unitQuery, params);
-    
+
     const results = [];
     let totalGenerated = 0;
 
@@ -259,7 +260,7 @@ async function createBatchForTrimester(req, res) {
         continue;
       }
 
-      const numClasses = calculateNumberOfClasses(unit.total_students, unit.classroom_type);
+      const numClasses = calculateNumberOfClasses(unit.total_students || 0, unit.classroom_type);
       const groupNames = generateGroupNames(numClasses);
       const capacity = ROOM_CAPACITIES[unit.classroom_type] || 30;
 
@@ -299,18 +300,19 @@ async function createBatchForTrimester(req, res) {
 async function update(req, res) {
   try {
     const { id } = req.params;
-    const { group_name, duration, max_capacity } = req.body;
-    
+    const { group_name, duration, max_capacity, enrolled_students } = req.body;
+
     const result = await pool.query(
-      `UPDATE classes SET 
+      `UPDATE classes SET
         group_name = COALESCE($1, group_name),
         duration = COALESCE($2, duration),
         max_capacity = COALESCE($3, max_capacity),
+        enrolled_students = COALESCE($4, enrolled_students),
         updated_at = NOW()
-       WHERE id = $4 RETURNING *`,
-      [group_name, duration, max_capacity, id]
+       WHERE id = $5 RETURNING *`,
+      [group_name, duration, max_capacity, enrolled_students, id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }

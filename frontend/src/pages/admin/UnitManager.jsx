@@ -22,7 +22,6 @@ export default function UnitManager() {
     code: '',
     degree_ids: [],
     classroom_type: 'normal',
-    total_students: 0,
     class_duration: 1,
     trimester_ids: []
   });
@@ -55,7 +54,6 @@ export default function UnitManager() {
         code: unit.code,
         degree_ids: (unit.degrees || []).map(d => d.id),
         classroom_type: unit.classroom_type,
-        total_students: unit.total_students || 0,
         class_duration: unit.class_duration || 1,
         trimester_ids: unit.trimester_ids || []
       });
@@ -65,7 +63,6 @@ export default function UnitManager() {
         code: '',
         degree_ids: [],
         classroom_type: 'normal',
-        total_students: 0,
         class_duration: 1,
         trimester_ids: []
       });
@@ -167,7 +164,6 @@ export default function UnitManager() {
                   <th>Unit Name</th>
                   <th>Degrees</th>
                   <th>Room Type</th>
-                  <th>Est. Students</th>
                   <th>Duration</th>
                   <th>Trimesters</th>
                   <th>Actions</th>
@@ -197,7 +193,6 @@ export default function UnitManager() {
                         {roomTypeLabel(unit.classroom_type)}
                       </span>
                     </td>
-                    <td className="text-center">{unit.total_students}</td>
                     <td>{durationLabel(unit.class_duration)}</td>
                     <td>
                       <div className="flex flex-wrap gap-1">
@@ -291,30 +286,16 @@ export default function UnitManager() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="form-group">
-              <label className="form-label">Required Room Type</label>
-              <select 
-                className="form-select" 
-                value={unitForm.classroom_type} 
-                onChange={e => setUnitForm({ ...unitForm, classroom_type: e.target.value })}
-              >
-                <option value="normal">Normal Lecture Room</option>
-                <option value="lab">Computer Lab</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Tentative Students Enrolled</label>
-              <input 
-                type="number" 
-                className="form-input" 
-                min="0"
-                placeholder="e.g. 120"
-                value={unitForm.total_students} 
-                onChange={e => setUnitForm({ ...unitForm, total_students: parseInt(e.target.value) || 0 })} 
-              />
-              <p className="text-xs text-surface-500 mt-1">Used to estimate number of classes needed</p>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Required Room Type</label>
+            <select
+              className="form-select"
+              value={unitForm.classroom_type}
+              onChange={e => setUnitForm({ ...unitForm, classroom_type: e.target.value })}
+            >
+              <option value="normal">Normal Lecture Room</option>
+              <option value="lab">Computer Lab</option>
+            </select>
           </div>
 
           <div className="form-group">

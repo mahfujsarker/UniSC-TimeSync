@@ -4,6 +4,7 @@
  * Supports grid-based scheduling (classrooms x time slots).
  */
 const pool = require('../config/db');
+const { checkAvailability: checkTutorAvailability } = require('./tutorAvailabilityController');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
@@ -317,8 +318,8 @@ function generateTimeSlots() {
 
 async function validateEntry(req, res) {
   try {
-    const { class_id, classroom_id, tutor_id, day_of_week, start_time, end_time, exclude_id } = req.body;
-    
+    const { class_id, classroom_id, tutor_id, day_of_week, start_time, end_time, exclude_id, trimester_id } = req.body;
+
     const timeErrors = validateTimeRange(start_time, end_time);
     if (timeErrors.length > 0) {
       return res.status(400).json({ valid: false, errors: timeErrors });
@@ -338,8 +339,19 @@ async function validateEntry(req, res) {
       }
     }
 
+    // Check tutor availability
+    if (tutor_id && trimester_id && day_of_week && start_time && end_time) {
+      const tutorAvailable = await checkTutorAvailability(tutor_id, trimester_id, day_of_week, start_time, end_time);
+      if (!tutorAvailable) {
+        return res.status(400).json({
+          valid: false,
+          errors: ['Tutor is not available for this trimester, day, or time.']
+        });
+      }
+    }
+
     const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, exclude_id);
-    res.json({ 
+    res.json({
       valid: conflicts.length === 0,
       conflicts
     });
@@ -353,7 +365,7 @@ async function create(req, res) {
   const client = await pool.connect();
   try {
     const { class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, is_recurring = true, week_number = null } = req.body;
-    
+
     if (!class_id || !unit_id || !classroom_id || !tutor_id || !trimester_id || !day_of_week || !start_time || !end_time) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -374,11 +386,19 @@ async function create(req, res) {
       return res.status(400).json({ error: roomValidation.message });
     }
 
+    // Check tutor availability
+    const tutorAvailable = await checkTutorAvailability(tutor_id, trimester_id, day_of_week, start_time, end_time);
+    if (!tutorAvailable) {
+      return res.status(409).json({
+        error: 'Tutor is not available for this trimester, day, or time.'
+      });
+    }
+
     const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time);
     if (conflicts.length > 0) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: 'Scheduling conflict detected',
-        conflicts 
+        conflicts
       });
     }
 
@@ -413,6 +433,7 @@ async function update(req, res) {
     const newDay = day_of_week || entry.day_of_week;
     const newStart = start_time || entry.start_time;
     const newEnd = end_time || entry.end_time;
+    const newTrimester = trimester_id || entry.trimester_id;
 
     const timeErrors = validateTimeRange(newStart, newEnd);
     if (timeErrors.length > 0) {
@@ -430,11 +451,19 @@ async function update(req, res) {
       }
     }
 
+    // Check tutor availability
+    const tutorAvailable = await checkTutorAvailability(newTutor, newTrimester, newDay, newStart, newEnd);
+    if (!tutorAvailable) {
+      return res.status(409).json({
+        error: 'Tutor is not available for this trimester, day, or time.'
+      });
+    }
+
     const conflicts = await checkConflicts(newClassroom, newTutor, newClass, newDay, newStart, newEnd, id);
     if (conflicts.length > 0) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: 'Scheduling conflict detected',
-        conflicts 
+        conflicts
       });
     }
 
@@ -488,7 +517,7 @@ async function scheduleClass(req, res) {
   const client = await pool.connect();
   try {
     const { class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, create_recurring = true } = req.body;
-    
+
     if (!class_id || !unit_id || !classroom_id || !tutor_id || !trimester_id || !day_of_week || !start_time || !end_time) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -509,6 +538,14 @@ async function scheduleClass(req, res) {
       return res.status(400).json({ error: roomValidation.message });
     }
 
+    // Check tutor availability
+    const tutorAvailable = await checkTutorAvailability(tutor_id, trimester_id, day_of_week, start_time, end_time);
+    if (!tutorAvailable) {
+      return res.status(409).json({
+        error: 'Tutor is not available for this trimester, day, or time.'
+      });
+    }
+
     await client.query('BEGIN');
 
     const entries = [];
@@ -520,7 +557,7 @@ async function scheduleClass(req, res) {
       if (existingRecurring.rows.length > 0) {
         await client.query('DELETE FROM timetable_entries WHERE class_id = $1 AND is_recurring = true', [class_id]);
       }
-      
+
       const result = await client.query(
         `INSERT INTO timetable_entries (class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, is_recurring)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true) RETURNING *`,

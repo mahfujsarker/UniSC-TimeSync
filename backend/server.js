@@ -38,6 +38,7 @@ app.use('/api/trimesters', require('./routes/trimesters'));
 app.use('/api/units', require('./routes/units'));
 app.use('/api/classrooms', require('./routes/classrooms'));
 app.use('/api/tutors', require('./routes/tutors'));
+app.use('/api/tutor-availability', require('./routes/tutorAvailability'));
 app.use('/api/timetable', require('./routes/timetable'));
 app.use('/api/classes', require('./routes/classes'));
 app.use('/api/student', require('./routes/students'));
