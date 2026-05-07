@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/admin/classrooms', icon: '🏫', label: 'Classrooms' },
   { path: '/admin/tutors', icon: '👨‍🏫', label: 'Tutors' },
   { path: '/admin/timetable', icon: '📅', label: 'Timetable' },
+  { path: '/admin/download-timetable', icon: '⬇️', label: 'Download Timetable' },
   { path: '/admin/calendar', icon: '🗓️', label: 'Calendar' },
 ];
 
