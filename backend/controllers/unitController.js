@@ -141,18 +141,18 @@ async function getByDegreeAndTrimester(req, res) {
 async function create(req, res) {
   const client = await pool.connect();
   try {
-    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids } = req.body;
-    
+    const { name, code, degree_ids, classroom_type, class_duration, trimester_ids } = req.body;
+
     if (!name || !code || !degree_ids || degree_ids.length === 0) {
       return res.status(400).json({ error: 'Name, code, and at least one degree_id are required' });
     }
 
     await client.query('BEGIN');
-    
+
     const unitResult = await client.query(
-      `INSERT INTO units (name, code, classroom_type, total_students, class_duration) 
+      `INSERT INTO units (name, code, classroom_type, total_students, class_duration)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name, code.toUpperCase(), classroom_type || 'normal', total_students || 0, class_duration || 1]
+      [name, code.toUpperCase(), classroom_type || 'normal', 0, class_duration || 1]
     );
     const newUnit = unitResult.rows[0];
 
@@ -173,10 +173,10 @@ async function create(req, res) {
     }
 
     await client.query('COMMIT');
-    
+
     newUnit.trimester_ids = trimester_ids || [];
     newUnit.degrees = degree_ids.map(id => ({ id }));
-    
+
     res.status(201).json(newUnit);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -198,7 +198,7 @@ async function update(req, res) {
   try {
     const { id } = req.params;
     const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids } = req.body;
-    
+
     await client.query('BEGIN');
 
     const currentUnit = await client.query('SELECT * FROM units WHERE id = $1', [id]);
@@ -206,7 +206,6 @@ async function update(req, res) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Unit not found' });
     }
-    const existingUnit = currentUnit.rows[0];
 
     if (code) {
       const codeExists = await client.query(
@@ -220,7 +219,7 @@ async function update(req, res) {
     }
 
     const result = await client.query(
-      `UPDATE units SET 
+      `UPDATE units SET
         name = COALESCE($1, name),
         code = COALESCE($2, code),
         classroom_type = COALESCE($3, classroom_type),
@@ -280,4 +279,29 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, getById, getByDegree, getByDegreeAndTrimester, create, update, remove };
+async function updateEnrolledStudents(req, res) {
+  try {
+    const { id } = req.params;
+    const { total_students } = req.body;
+
+    if (!total_students || total_students < 0) {
+      return res.status(400).json({ error: 'Valid enrolled student number is required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE units SET total_students = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [total_students, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Unit not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating enrolled students:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+module.exports = { getAll, getById, getByDegree, getByDegreeAndTrimester, create, update, updateEnrolledStudents, remove };

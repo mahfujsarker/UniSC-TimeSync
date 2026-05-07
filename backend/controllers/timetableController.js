@@ -6,17 +6,24 @@
 const pool = require('../config/db');
 const { checkAvailability: checkTutorAvailability } = require('./tutorAvailabilityController');
 
-async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, excludeId = null) {
+async function checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
   
   if (!classroom_id || !day_of_week || !start_time || !end_time) {
     return conflicts;
   }
   
-  const excludeClause = excludeId ? ' AND te.id != $5' : '';
-  
   const roomParams = [classroom_id, day_of_week, start_time, end_time];
-  if (excludeId) roomParams.push(excludeId);
+  let roomTrimesterClause = '';
+  let roomExcludeClause = '';
+  if (trimester_id) {
+    roomTrimesterClause = ` AND te.trimester_id = $${roomParams.length + 1}`;
+    roomParams.push(trimester_id);
+  }
+  if (excludeId) {
+    roomExcludeClause = ` AND te.id != $${roomParams.length + 1}`;
+    roomParams.push(excludeId);
+  }
   
   const roomConflict = await pool.query(
     `SELECT te.*, u.name as unit_name, u.code as unit_code, c.room_number
@@ -27,7 +34,8 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
        AND te.day_of_week = $2
        AND te.start_time < $4 
        AND te.end_time > $3
-       ${excludeClause}`,
+       ${roomTrimesterClause}
+       ${roomExcludeClause}`,
     roomParams
   );
   if (roomConflict.rows.length > 0) {
@@ -39,10 +47,17 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
     });
   }
 
-  const tutorParams = typeof excludeId !== 'undefined' && excludeId !== null 
-    ? [tutor_id, day_of_week, start_time, end_time, excludeId]
-    : [tutor_id, day_of_week, start_time, end_time];
-  const tutorExcludeClause = (typeof excludeId !== 'undefined' && excludeId !== null) ? ' AND te.id != $5' : '';
+  const tutorParams = [tutor_id, day_of_week, start_time, end_time];
+  let tutorTrimesterClause = '';
+  let tutorExcludeClause = '';
+  if (trimester_id) {
+    tutorTrimesterClause = ` AND te.trimester_id = $${tutorParams.length + 1}`;
+    tutorParams.push(trimester_id);
+  }
+  if (excludeId) {
+    tutorExcludeClause = ` AND te.id != $${tutorParams.length + 1}`;
+    tutorParams.push(excludeId);
+  }
   
   const tutorConflict = await pool.query(
     `SELECT te.*, u.name as unit_name, u.code as unit_code, t.name as tutor_name
@@ -53,6 +68,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
        AND te.day_of_week = $2
        AND te.start_time < $4 
        AND te.end_time > $3
+       ${tutorTrimesterClause}
        ${tutorExcludeClause}`,
     tutorParams
   );
@@ -66,10 +82,17 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
   }
 
   if (class_id) {
-    const classParams = typeof excludeId !== 'undefined' && excludeId !== null
-      ? [class_id, day_of_week, start_time, end_time, excludeId]
-      : [class_id, day_of_week, start_time, end_time];
-    const classExcludeClause = (typeof excludeId !== 'undefined' && excludeId !== null) ? ' AND te.id != $5' : '';
+    const classParams = [class_id, day_of_week, start_time, end_time];
+    let classTrimesterClause = '';
+    let classExcludeClause = '';
+    if (trimester_id) {
+      classTrimesterClause = ` AND te.trimester_id = $${classParams.length + 1}`;
+      classParams.push(trimester_id);
+    }
+    if (excludeId) {
+      classExcludeClause = ` AND te.id != $${classParams.length + 1}`;
+      classParams.push(excludeId);
+    }
     
     const classConflict = await pool.query(
       `SELECT te.*, u.name as unit_name, u.code as unit_code, cl.group_name
@@ -80,6 +103,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, day_of_week, sta
          AND te.day_of_week = $2
          AND te.start_time < $4 
          AND te.end_time > $3
+         ${classTrimesterClause}
          ${classExcludeClause}`,
       classParams
     );
@@ -108,6 +132,35 @@ async function validateRoomType(classroom_id, required_room_type) {
       message: `Room type mismatch: ${required_room_type} room required, but ${roomType} room provided` 
     };
   }
+  return { valid: true };
+}
+
+async function validateRoomSuitability(classroom_id, cls) {
+  const result = await pool.query(
+    'SELECT type, max_capacity, is_available FROM classrooms WHERE id = $1',
+    [classroom_id]
+  );
+  if (result.rows.length === 0) {
+    return { valid: false, message: 'Classroom not found' };
+  }
+
+  const room = result.rows[0];
+  if (!room.is_available) {
+    return { valid: false, message: 'Classroom is not available' };
+  }
+  if (room.type !== cls.required_room_type) {
+    return {
+      valid: false,
+      message: `Room type mismatch: ${cls.required_room_type} room required, but ${room.type} room provided`
+    };
+  }
+  if (Number(room.max_capacity) < Number(cls.max_capacity || 0)) {
+    return {
+      valid: false,
+      message: `Room capacity too small: capacity ${room.max_capacity}, class requires ${cls.max_capacity}`
+    };
+  }
+
   return { valid: true };
 }
 
@@ -318,8 +371,8 @@ function generateTimeSlots() {
 
 async function validateEntry(req, res) {
   try {
-    const { class_id, classroom_id, tutor_id, day_of_week, start_time, end_time, exclude_id, trimester_id } = req.body;
-
+    const { class_id, classroom_id, tutor_id, day_of_week, start_time, end_time, exclude_id } = req.body;
+    
     const timeErrors = validateTimeRange(start_time, end_time);
     if (timeErrors.length > 0) {
       return res.status(400).json({ valid: false, errors: timeErrors });
@@ -332,7 +385,7 @@ async function validateEntry(req, res) {
       );
       if (classResult.rows.length > 0) {
         const cls = classResult.rows[0];
-        const roomValidation = await validateRoomType(classroom_id, cls.required_room_type);
+        const roomValidation = await validateRoomSuitability(classroom_id, cls);
         if (!roomValidation.valid) {
           return res.status(400).json({ valid: false, errors: [roomValidation.message] });
         }
@@ -351,7 +404,7 @@ async function validateEntry(req, res) {
     }
 
     const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, exclude_id);
-    res.json({
+    res.json({ 
       valid: conflicts.length === 0,
       conflicts
     });
@@ -381,7 +434,7 @@ async function create(req, res) {
     }
     const cls = classResult.rows[0];
 
-    const roomValidation = await validateRoomType(classroom_id, cls.required_room_type);
+    const roomValidation = await validateRoomSuitability(classroom_id, cls);
     if (!roomValidation.valid) {
       return res.status(400).json({ error: roomValidation.message });
     }
@@ -394,7 +447,7 @@ async function create(req, res) {
       });
     }
 
-    const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time);
+    const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time);
     if (conflicts.length > 0) {
       return res.status(409).json({
         error: 'Scheduling conflict detected',
@@ -421,7 +474,7 @@ async function update(req, res) {
     const { id } = req.params;
     const { class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, is_recurring, week_number } = req.body;
 
-    const current = await pool.query('SELECT te.*, cl.required_room_type FROM timetable_entries te JOIN classes cl ON te.class_id = cl.id WHERE te.id = $1', [id]);
+    const current = await pool.query('SELECT te.*, cl.required_room_type, cl.max_capacity FROM timetable_entries te JOIN classes cl ON te.class_id = cl.id WHERE te.id = $1', [id]);
     if (current.rows.length === 0) {
       return res.status(404).json({ error: 'Timetable entry not found' });
     }
@@ -430,6 +483,7 @@ async function update(req, res) {
     const newClassroom = classroom_id || entry.classroom_id;
     const newTutor = tutor_id || entry.tutor_id;
     const newClass = class_id || entry.class_id;
+    const newTrimester = trimester_id || entry.trimester_id;
     const newDay = day_of_week || entry.day_of_week;
     const newStart = start_time || entry.start_time;
     const newEnd = end_time || entry.end_time;
@@ -440,15 +494,18 @@ async function update(req, res) {
       return res.status(400).json({ error: timeErrors.join(', ') });
     }
 
-    if (class_id) {
+    let classForValidation = entry;
+    if (class_id && class_id !== entry.class_id) {
       const classResult = await pool.query('SELECT * FROM classes WHERE id = $1', [class_id]);
-      if (classResult.rows.length > 0) {
-        const cls = classResult.rows[0];
-        const roomValidation = await validateRoomType(newClassroom, cls.required_room_type);
-        if (!roomValidation.valid) {
-          return res.status(400).json({ error: roomValidation.message });
-        }
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Class not found' });
       }
+      classForValidation = classResult.rows[0];
+    }
+
+    const roomValidation = await validateRoomSuitability(newClassroom, classForValidation);
+    if (!roomValidation.valid) {
+      return res.status(400).json({ error: roomValidation.message });
     }
 
     // Check tutor availability
@@ -459,7 +516,7 @@ async function update(req, res) {
       });
     }
 
-    const conflicts = await checkConflicts(newClassroom, newTutor, newClass, newDay, newStart, newEnd, id);
+    const conflicts = await checkConflicts(newClassroom, newTutor, newClass, newTrimester, newDay, newStart, newEnd, id);
     if (conflicts.length > 0) {
       return res.status(409).json({
         error: 'Scheduling conflict detected',
@@ -533,7 +590,7 @@ async function scheduleClass(req, res) {
     }
     const cls = classResult.rows[0];
 
-    const roomValidation = await validateRoomType(classroom_id, cls.required_room_type);
+    const roomValidation = await validateRoomSuitability(classroom_id, cls);
     if (!roomValidation.valid) {
       return res.status(400).json({ error: roomValidation.message });
     }
@@ -554,6 +611,13 @@ async function scheduleClass(req, res) {
         'SELECT id FROM timetable_entries WHERE class_id = $1 AND is_recurring = true',
         [class_id]
       );
+      const excludeId = existingRecurring.rows[0]?.id || null;
+      const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time, excludeId);
+      if (conflicts.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Scheduling conflict detected', conflicts });
+      }
+
       if (existingRecurring.rows.length > 0) {
         await client.query('DELETE FROM timetable_entries WHERE class_id = $1 AND is_recurring = true', [class_id]);
       }
@@ -565,7 +629,7 @@ async function scheduleClass(req, res) {
       );
       entries.push(result.rows[0]);
     } else {
-      const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time);
+      const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time);
       if (conflicts.length > 0) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'Scheduling conflict detected', conflicts });

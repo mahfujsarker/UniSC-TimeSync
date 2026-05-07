@@ -17,6 +17,8 @@ import TrimesterManager from './pages/admin/TrimesterManager';
 import ClassroomManager from './pages/admin/ClassroomManager';
 import TutorManager from './pages/admin/TutorManager';
 import TimetableManager from './pages/admin/TimetableManager';
+import RoutineTimetable from './pages/admin/RoutineTimetable';
+import DownloadTimetable from './pages/admin/DownloadTimetable';
 import CalendarManager from './pages/admin/CalendarManager';
 
 // Student pages
@@ -51,8 +53,19 @@ function AppRoutes() {
         <Route path="classrooms" element={<ClassroomManager />} />
         <Route path="tutors" element={<TutorManager />} />
         <Route path="timetable" element={<TimetableManager />} />
+        <Route path="timetable/routine/:trimesterId" element={<RoutineTimetable />} />
+        <Route path="download-timetable" element={<DownloadTimetable />} />
         <Route path="calendar" element={<CalendarManager />} />
       </Route>
+
+      <Route
+        path="/download-timetable"
+        element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin/download-timetable" replace /></ProtectedRoute>}
+      />
+      <Route
+        path="/timetable/routine/:trimesterId"
+        element={<ProtectedRoute requiredRole="admin"><RoutineTimetable /></ProtectedRoute>}
+      />
 
       {/* Student routes */}
       <Route path="/student" element={<ProtectedRoute requiredRole="student"><StudentDashboard /></ProtectedRoute>}>

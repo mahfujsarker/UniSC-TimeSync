@@ -143,7 +143,7 @@ export default function UnitManager() {
         <div className="flex items-center gap-2 text-sm">
           <span className="badge badge-info">Note:</span>
           <span className="text-surface-600">
-            Enter the tentative number of students that can enroll. Classes are generated separately in the Timetable Manager.
+            Classes are generated in the Timetable Manager where you can enter enrolled student numbers.
           </span>
         </div>
       </div>
