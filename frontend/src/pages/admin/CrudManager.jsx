@@ -87,9 +87,12 @@ export default function CrudManager({
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-surface-100" style={{ fontFamily: 'var(--font-heading)' }}>{title}</h2>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Management</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>{title}</h2>
+          <p className="page-subtitle">Create, update, and maintain {entityName.toLowerCase()} records.</p>
+        </div>
         <button onClick={openCreate} className="btn btn-primary">
           + Add {entityName}
         </button>

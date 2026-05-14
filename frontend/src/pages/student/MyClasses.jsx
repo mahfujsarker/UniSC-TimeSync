@@ -1,5 +1,5 @@
 /**
- * My Classes — Student's enrolled classes.
+ * My Classes - Student's enrolled classes.
  */
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
@@ -37,7 +37,6 @@ export default function MyClasses() {
     }
   };
 
-  // Group by day
   const grouped = classes.reduce((acc, cls) => {
     const day = cls.day_of_week;
     if (!acc[day]) acc[day] = [];
@@ -50,23 +49,26 @@ export default function MyClasses() {
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <h2 className="text-2xl font-bold text-surface-100 mb-6" style={{ fontFamily: 'var(--font-heading)' }}>
-        📚 My Classes
-      </h2>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Enrolled schedule</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>My Classes</h2>
+          <p className="page-subtitle">Review your enrolled classes grouped by teaching day.</p>
+        </div>
+      </div>
 
       {loading ? (
-        <div className="glass-card p-12 text-center text-surface-400">Loading...</div>
+        <div className="glass-card p-12 text-center text-surface-500">Loading...</div>
       ) : classes.length === 0 ? (
-        <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-3">📭</div>
-          <p className="text-surface-400 mb-3">You haven't enrolled in any classes yet</p>
+        <div className="empty-state">
+          <p className="mb-3">You haven't enrolled in any classes yet.</p>
           <a href="/student/select-classes" className="btn btn-primary btn-sm">Browse Classes</a>
         </div>
       ) : (
         <>
           <div className="glass-card p-4 mb-6">
             <div className="flex items-center gap-4">
-              <span className="text-sm text-surface-400">Total enrolled:</span>
+              <span className="text-sm text-surface-600">Total enrolled:</span>
               <span className="badge badge-primary">{classes.length} classes</span>
             </div>
           </div>
@@ -74,23 +76,23 @@ export default function MyClasses() {
           <div className="space-y-6">
             {sortedDays.map(day => (
               <div key={day}>
-                <h3 className="text-lg font-bold text-surface-200 mb-3" style={{ fontFamily: 'var(--font-heading)' }}>{day}</h3>
+                <h3 className="text-lg font-bold text-brand-dark mb-3" style={{ fontFamily: 'var(--font-heading)' }}>{day}</h3>
                 <div className="space-y-2">
                   {grouped[day].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')).map(cls => (
-                    <div key={cls.selection_id} className="glass-card p-4 flex items-center justify-between">
+                    <div key={cls.selection_id} className="glass-card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary-600/20">
-                          <span className="text-primary-400 font-bold text-xs">{cls.start_time?.substring(0, 5)}</span>
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-brand-blue/10">
+                          <span className="text-brand-blue font-bold text-xs">{cls.start_time?.substring(0, 5)}</span>
                         </div>
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
                             <span className="badge badge-primary text-xs">{cls.unit_code}</span>
-                            <span className="text-sm font-medium text-surface-100">{cls.unit_name}</span>
+                            <span className="text-sm font-semibold text-brand-dark">{cls.unit_name}</span>
                           </div>
-                          <div className="text-xs text-surface-400 flex gap-3">
-                            <span>🕐 {cls.start_time?.substring(0, 5)} – {cls.end_time?.substring(0, 5)} ({calculateDuration(cls.start_time, cls.end_time)})</span>
-                            <span>📍 {cls.room_number}</span>
-                            <span>👤 {cls.tutor_name}</span>
+                          <div className="text-xs text-surface-600 flex flex-wrap gap-3">
+                            <span>{cls.start_time?.substring(0, 5)} - {cls.end_time?.substring(0, 5)} ({calculateDuration(cls.start_time, cls.end_time)})</span>
+                            <span>Room {cls.room_number}</span>
+                            <span>{cls.tutor_name}</span>
                           </div>
                         </div>
                       </div>

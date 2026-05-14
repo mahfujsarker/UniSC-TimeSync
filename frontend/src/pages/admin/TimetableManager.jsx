@@ -3,9 +3,10 @@
  * Kanban board layout with rooms as rows, days as columns, time slots as sub-rows.
  * Enrolled student numbers entered per unit before generating classes.
  */
-import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { createPortal } from 'react-dom';
 import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import Toast from '../../components/Toast';
@@ -29,8 +30,11 @@ const DAY_COLORS = {
   Friday: '#10b981',
 };
 
+const MINI_MAP_COLORS = ['#0052c4', '#198754', '#f59e0b', '#8b5cf6', '#dc3545', '#06b6d4', '#111111'];
+
 function timeToMinutes(time) {
-  const [hour, minute] = time.substring(0, 5).split(':').map(Number);
+  if (!time) return NaN;
+  const [hour, minute] = String(time).substring(0, 5).split(':').map(Number);
   return hour * 60 + minute;
 }
 
@@ -38,6 +42,134 @@ function minutesToTime(minutes) {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+}
+
+function ClassLocationMiniMap({ classrooms, unitEntries, onFocusEntry }) {
+  const gridColumnCount = Math.max(classrooms.length * DAYS.length, 1);
+  const gridTemplateColumns = `2rem repeat(${gridColumnCount}, 0.375rem)`;
+  const minWidth = `${Math.max(150, 32 + gridColumnCount * 8)}px`;
+
+  const entryColors = useMemo(() => {
+    return unitEntries.reduce((colors, entry, index) => {
+      colors.set(String(entry.id), MINI_MAP_COLORS[index % MINI_MAP_COLORS.length]);
+      return colors;
+    }, new Map());
+  }, [unitEntries]);
+
+  const entriesByCoveredCell = useMemo(() => {
+    const cells = new Map();
+
+    unitEntries.forEach(entry => {
+      const startMinutes = timeToMinutes(entry.start_time);
+      const endMinutes = timeToMinutes(entry.end_time);
+      if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) return;
+
+      const coveredSlots = TIME_SLOTS.filter(slot => {
+        const slotMinutes = timeToMinutes(slot);
+        return slotMinutes >= startMinutes && slotMinutes < endMinutes;
+      });
+
+      TIME_SLOTS.forEach(slot => {
+        const slotMinutes = timeToMinutes(slot);
+        if (slotMinutes >= startMinutes && slotMinutes < endMinutes) {
+          const slotIndex = coveredSlots.indexOf(slot);
+          cells.set(`${entry.classroom_id}|${slot}|${entry.day_of_week}`, {
+            entry,
+            color: entryColors.get(String(entry.id)) || MINI_MAP_COLORS[0],
+            isStart: slotIndex === 0,
+            isEnd: slotIndex === coveredSlots.length - 1,
+            isSingle: coveredSlots.length === 1
+          });
+        }
+      });
+    });
+
+    return cells;
+  }, [entryColors, unitEntries]);
+
+  const getTooltip = (room, day, slot, entry) => {
+    if (!entry) return `${room.room_number} | ${day} | ${slot}`;
+
+    return [
+      `Class Group: ${String(entry.group_name || 'N/A').replace(/^Group\s+/i, '')}`,
+      `Room: ${room.room_number}`,
+      `Day: ${day}`,
+      `Time: ${entry.start_time?.substring(0, 5)}-${entry.end_time?.substring(0, 5)}`,
+      `Tutor: ${entry.tutor_name || 'TBA'}`
+    ].join('\n');
+  };
+
+  if (classrooms.length === 0) {
+    return (
+      <div className="mt-2 rounded-lg border border-white/70 bg-white/55 p-2 text-[10px] text-surface-500">
+        No rooms available for map.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-white/70 bg-white/65 p-2 shadow-sm backdrop-blur">
+      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-surface-500">
+        <span>{classrooms.length} rooms x {DAYS.length} days x {TIME_SLOTS.length} slots</span>
+        <span className="font-semibold text-brand-blue">{unitEntries.length} class{unitEntries.length === 1 ? '' : 'es'}</span>
+      </div>
+
+      <div className="overflow-x-auto pb-1">
+        <div className="grid gap-[2px]" style={{ gridTemplateColumns, minWidth }}>
+          <div />
+          {classrooms.flatMap(room => (
+            DAYS.map(day => (
+              <span
+                key={`${room.id}-${day}-map-header`}
+                className="h-1.5 w-1.5 rounded-sm"
+                title={`${room.room_number} | ${day}`}
+                style={{ backgroundColor: DAY_COLORS[day] }}
+              />
+            ))
+          ))}
+
+          {TIME_SLOTS.map(slot => (
+            <Fragment key={`map-row-${slot}`}>
+              <div className="h-1.5 pr-1 text-right text-[8px] leading-[0.375rem] text-surface-400">
+                {slot.endsWith(':00') ? slot.substring(0, 2) : ''}
+              </div>
+
+              {classrooms.flatMap(room => (
+                DAYS.map(day => {
+                  const key = `${room.id}|${slot}|${day}`;
+                  const cell = entriesByCoveredCell.get(key);
+                  const entry = cell?.entry;
+                  const title = getTooltip(room, day, slot, entry);
+
+                  if (entry) {
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`minimap-dot minimap-dot-active ${cell.isSingle ? 'is-single' : ''} ${cell.isStart ? 'is-start' : ''} ${cell.isEnd ? 'is-end' : ''}`}
+                        style={{ backgroundColor: cell.color, borderColor: cell.color }}
+                        title={title}
+                        aria-label={title.replace(/\n/g, ', ')}
+                        onClick={() => onFocusEntry(entry)}
+                      />
+                    );
+                  }
+
+                  return (
+                    <span
+                      key={key}
+                      className="minimap-dot bg-surface-300/60"
+                      title={title}
+                    />
+                  );
+                })
+              ))}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function TimetableManager() {
@@ -54,6 +186,10 @@ export default function TimetableManager() {
   const [loading, setLoading] = useState(false);
   const [generatingUnit, setGeneratingUnit] = useState(null);
   const [enrolledStudents, setEnrolledStudents] = useState({});
+  const [expandedMiniMaps, setExpandedMiniMaps] = useState({});
+  const [focusedEntryId, setFocusedEntryId] = useState(null);
+  const focusTimeoutRef = useRef(null);
+  const selectedTrimesterRef = useRef('');
 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -124,8 +260,10 @@ export default function TimetableManager() {
     }
 
     try {
-      const params = new URLSearchParams({ trimester_id: selectedTrimester });
+      const trimesterId = selectedTrimester;
+      const params = new URLSearchParams({ trimester_id: trimesterId });
       const res = await api.get(`/timetable?${params.toString()}`);
+      if (String(selectedTrimesterRef.current) !== String(trimesterId)) return;
       const uniqueEntries = Array.from(
         new Map(res.data.map(entry => [entry.id, entry])).values()
       );
@@ -135,8 +273,23 @@ export default function TimetableManager() {
     }
   }, [selectedTrimester]);
 
+  useEffect(() => {
+    selectedTrimesterRef.current = selectedTrimester;
+    setScheduledEntries([]);
+    setExpandedMiniMaps({});
+    setFocusedEntryId(null);
+  }, [selectedTrimester]);
+
   useEffect(() => { loadUnits(); }, [loadUnits]);
   useEffect(() => { loadScheduledEntries(); }, [loadScheduledEntries]);
+
+  useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) {
+        window.clearTimeout(focusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleEnrolledStudentsChange = async (unitId, value) => {
     const numValue = parseInt(value) || 0;
@@ -349,6 +502,26 @@ export default function TimetableManager() {
     try {
       await api.put(`/timetable/${entryId}`, updateData);
 
+      const newRoom = newRoomId
+        ? classrooms.find(room => String(room.id) === String(newRoomId))
+        : null;
+
+      setScheduledEntries(prev => prev.map(item => (
+        String(item.id) === String(entryId)
+          ? {
+              ...item,
+              day_of_week: newDay,
+              start_time: formattedStartTime,
+              end_time: newEndTime,
+              classroom_id: newRoomId || item.classroom_id,
+              room_number: newRoom?.room_number || item.room_number,
+              room_location: newRoom?.location || item.room_location,
+              room_type: newRoom?.type || item.room_type,
+              max_capacity: newRoom?.max_capacity || item.max_capacity
+            }
+          : item
+      )));
+
       setToast({ message: 'Class moved', type: 'success' });
       loadScheduledEntries();
     } catch (err) {
@@ -386,6 +559,38 @@ export default function TimetableManager() {
     });
     setShowScheduleModal(true);
   };
+
+  const toggleMiniMap = (unitId) => {
+    setExpandedMiniMaps(prev => ({
+      ...prev,
+      [unitId]: !prev[unitId]
+    }));
+  };
+
+  const focusEntryOnBoard = useCallback((entry) => {
+    const entryId = String(entry.id);
+    const element = document.getElementById(`timetable-entry-${entryId}`);
+
+    setFocusedEntryId(entryId);
+
+    if (focusTimeoutRef.current) {
+      window.clearTimeout(focusTimeoutRef.current);
+    }
+
+    if (element) {
+      requestAnimationFrame(() => {
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'center'
+        });
+      });
+    }
+
+    focusTimeoutRef.current = window.setTimeout(() => {
+      setFocusedEntryId(current => current === entryId ? null : current);
+    }, 3200);
+  }, []);
 
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
@@ -463,6 +668,16 @@ export default function TimetableManager() {
     }, new Map());
   }, [scheduledEntries]);
 
+  const scheduledEntriesByUnit = useMemo(() => {
+    return scheduledEntries.reduce((entries, entry) => {
+      const key = String(entry.unit_id);
+      const existing = entries.get(key) || [];
+      existing.push(entry);
+      entries.set(key, existing);
+      return entries;
+    }, new Map());
+  }, [scheduledEntries]);
+
   const getScheduledCountForUnit = (unitId) => {
     return scheduledCountsByUnit.get(unitId) || 0;
   };
@@ -476,10 +691,12 @@ export default function TimetableManager() {
     <div className="min-h-screen">
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-surface-900" style={{ fontFamily: 'var(--font-heading)' }}>
-          📅 Timetable Scheduler
-        </h2>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Scheduling board</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Timetable Scheduler</h2>
+          <p className="page-subtitle">Generate classes, validate conflicts, and arrange the selected trimester board.</p>
+        </div>
         <div className="flex gap-2">
           {selectedTrimester ? (
             <Link to={`/admin/timetable/routine/${selectedTrimester}`} className="btn btn-sm btn-primary">
@@ -495,12 +712,12 @@ export default function TimetableManager() {
             className="btn btn-sm btn-secondary"
             disabled={loading}
           >
-            ↻ Refresh
+            Refresh
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-surface-200 p-4 mb-6">
+      <div className="glass-card p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="form-group">
             <label className="form-label">Select Degree (Filter)</label>
@@ -511,7 +728,7 @@ export default function TimetableManager() {
             >
               <option value="">All Degrees</option>
               {degrees.map(d => (
-                <option key={d.id} value={d.id}>{d.code} — {d.name}</option>
+                <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
               ))}
             </select>
           </div>
@@ -532,9 +749,9 @@ export default function TimetableManager() {
       </div>
 
       <>
-          <div className="flex gap-4 mb-6">
-            <div className="w-80 flex-shrink-0">
-              <div className="bg-white rounded-lg border border-surface-200 p-4">
+          <div className="flex flex-col gap-4 mb-6 xl:flex-row">
+            <div className="w-full xl:w-80 flex-shrink-0">
+              <div className="glass-card p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-sm text-surface-900">Units</h3>
                   <button
@@ -553,17 +770,19 @@ export default function TimetableManager() {
                 ) : units.length === 0 ? (
                   <div className="text-center py-6 text-surface-500 text-sm">No units for selected filters</div>
                 ) : (
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                     {units.map(unit => {
                       const scheduledCount = getScheduledCountForUnit(unit.id);
                       const enrolled = getEnrolledStudents(unit.id);
                       const numClasses = Math.ceil(enrolled / (unit.classroom_type === 'lab' ? 25 : 30));
                       const hasClasses = scheduledCount > 0;
+                      const unitScheduledEntries = scheduledEntriesByUnit.get(String(unit.id)) || [];
+                      const isMiniMapExpanded = !!expandedMiniMaps[unit.id];
 
                       return (
                         <div
                           key={unit.id}
-                          className={`border rounded-md p-3 ${hasClasses ? 'bg-surface-50 border-surface-300' : 'border-surface-200'}`}
+                          className={`rounded-xl border p-3 transition-all hover:border-brand-blue/40 hover:bg-white/80 ${hasClasses ? 'bg-white/60 border-white/80' : 'bg-white/45 border-white/60'}`}
                         >
                           <div className="flex items-start justify-between mb-1">
                             <div>
@@ -580,7 +799,7 @@ export default function TimetableManager() {
                             <input
                               type="number"
                               min="0"
-                              className="w-16 text-[10px] border border-surface-300 rounded px-1 py-0.5"
+                              className="w-16 text-[10px] border border-white/70 bg-white/70 rounded-md px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                               placeholder="0"
                               value={enrolled || ''}
                               onChange={e => handleEnrolledStudentsChange(unit.id, e.target.value)}
@@ -593,12 +812,39 @@ export default function TimetableManager() {
                           </div>
 
                           {hasClasses ? (
-                            <div className="flex items-center gap-2 text-sm text-success">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>✓ Generated ({scheduledCount} classes)</span>
-                            </div>
+                            <>
+                              <div className="flex items-center gap-2 text-sm text-success">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Generated ({scheduledCount} classes)</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => toggleMiniMap(unit.id)}
+                                className="mt-2 flex w-full items-center justify-between rounded-lg border border-white/70 bg-white/65 px-2 py-1.5 text-left text-[11px] font-semibold text-surface-700 transition-colors hover:border-brand-blue hover:text-brand-blue"
+                                aria-expanded={isMiniMapExpanded}
+                              >
+                                <span>{isMiniMapExpanded ? 'Hide' : 'Show'} Class Location Map</span>
+                                <svg
+                                  className={`mini-map-chevron ${isMiniMapExpanded ? 'is-open' : ''}`}
+                                  viewBox="0 0 20 20"
+                                  fill="none"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M5 7.5 10 12.5 15 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+
+                              {isMiniMapExpanded && (
+                                <ClassLocationMiniMap
+                                  classrooms={classrooms}
+                                  unitEntries={unitScheduledEntries}
+                                  onFocusEntry={focusEntryOnBoard}
+                                />
+                              )}
+                            </>
                           ) : (
                             <button
                               onClick={() => handleGenerateClass(unit.id)}
@@ -618,23 +864,23 @@ export default function TimetableManager() {
 
             <div className="flex-1 min-w-0 overflow-x-auto">
               <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="bg-white rounded-lg border border-surface-200 overflow-auto max-h-[calc(100vh-260px)]">
+                <div className="glass-card timetable-dnd-board overflow-auto max-h-[calc(100vh-260px)]">
                   {classrooms.length === 0 ? (
                     <div className="p-12 text-center text-surface-500">No available classrooms</div>
                   ) : (
                     <div style={{ minWidth: boardMinWidth }}>
                       <div
-                        className="grid sticky top-0 z-20 bg-white"
+                        className="grid sticky top-0 z-20 bg-white/90 backdrop-blur-xl"
                         style={{ gridTemplateColumns: boardGridTemplateColumns }}
                       >
-                        <div className="row-span-2 h-24 flex items-center justify-center bg-surface-50 border-b border-r border-surface-200 font-semibold text-surface-800">
+                        <div className="row-span-2 h-24 flex items-center justify-center bg-white/80 border-b border-r border-white/70 font-semibold text-surface-800">
                           Time
                         </div>
 
                         {classrooms.map(room => (
                           <div
                             key={room.id}
-                            className={`h-12 flex items-center justify-center border-b border-r border-surface-200 font-bold text-surface-900 ${room.type === 'lab' ? 'bg-amber-50' : 'bg-blue-50'}`}
+                            className={`h-12 flex items-center justify-center border-b border-r border-white/70 font-bold text-surface-900 ${room.type === 'lab' ? 'bg-amber-50/90' : 'bg-blue-50/90'}`}
                             style={{ gridColumn: `span ${DAYS.length} / span ${DAYS.length}` }}
                           >
                             {room.room_number}
@@ -645,7 +891,7 @@ export default function TimetableManager() {
                           DAYS.map(day => (
                             <div
                               key={`${room.id}-${day}-header`}
-                              className="h-12 flex items-center justify-center border-b border-r border-surface-200 bg-surface-50 text-xs font-semibold text-surface-700"
+                              className="h-12 flex items-center justify-center border-b border-r border-white/70 bg-white/70 text-xs font-semibold text-surface-700"
                               style={{ borderLeft: `3px solid ${DAY_COLORS[day]}` }}
                             >
                               {day.substring(0, 3)}
@@ -660,10 +906,10 @@ export default function TimetableManager() {
                       >
                         {TIME_SLOTS.map((slot, slotIndex) => (
                           <Fragment key={slot}>
-                            <div className="h-12 relative flex items-start justify-end pr-3 pt-1 text-xs text-surface-500 font-medium border-b border-r border-surface-200 bg-surface-50">
+                            <div className="time-cell-sticky h-12 flex items-start justify-end pr-3 pt-1 text-xs text-surface-500 font-medium border-b border-r border-white/70 bg-white/85 backdrop-blur-xl">
                               <span>{slot}</span>
                               {slotIndex === TIME_SLOTS.length - 1 && (
-                                <span className="absolute -bottom-2 right-3 bg-surface-50 pl-1">22:00</span>
+                                <span className="absolute -bottom-2 right-3 bg-white/85 pl-1">22:00</span>
                               )}
                             </div>
 
@@ -682,7 +928,7 @@ export default function TimetableManager() {
                                       <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`h-12 border-b border-r border-surface-200 relative transition-colors duration-75 ${slotIndex % 2 === 0 ? 'bg-white' : 'bg-surface-50/50'} ${snapshot.isDraggingOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset' : ''}`}
+                                        className={`h-12 border-b border-r border-white/70 relative transition-colors duration-75 ${slotIndex % 2 === 0 ? 'bg-white/50' : 'bg-white/30'} ${snapshot.isDraggingOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset' : ''}`}
                                       >
                                         {cellEntries.map((entry, entryIndex) => {
                                           const { height } = calculateCardStyle(entry);
@@ -690,32 +936,42 @@ export default function TimetableManager() {
 
                                           return (
                                             <Draggable key={entry.id} draggableId={String(entry.id)} index={entryIndex}>
-                                              {(provided, snapshot) => (
-                                                <div
-                                                  ref={provided.innerRef}
-                                                  {...provided.draggableProps}
-                                                  {...provided.dragHandleProps}
-                                                  className={`absolute left-1 right-1 z-10 rounded-md p-1 cursor-grab overflow-hidden text-[10px] border ${colors.bg} ${colors.border} ${snapshot.isDragging ? 'shadow-xl z-50 cursor-grabbing ring-2 ring-brand-blue/30' : 'hover:shadow-md'}`}
-                                                  style={{
-                                                    height: `${height}px`,
-                                                    top: '2px',
-                                                    borderLeft: `3px solid ${dayColor}`,
-                                                    willChange: snapshot.isDragging ? 'transform' : undefined,
-                                                    ...provided.draggableProps.style
-                                                  }}
-                                                  onClick={() => handleEntryClick(entry)}
-                                                >
-                                                  <div className="font-bold text-[10px] leading-tight truncate text-surface-900">
-                                                    {entry.unit_code}
+                                              {(provided, snapshot) => {
+                                                const card = (
+                                                  <div
+                                                    ref={provided.innerRef}
+                                                    {...provided.draggableProps}
+                                                    {...provided.dragHandleProps}
+                                                    id={`timetable-entry-${entry.id}`}
+                                                    className={`${snapshot.isDragging ? 'z-50' : 'absolute left-1 right-1 z-10'} rounded-lg p-1 cursor-grab overflow-hidden text-[10px] border ${colors.bg} ${colors.border} shadow-sm backdrop-blur ${snapshot.isDragging ? 'shadow-xl cursor-grabbing ring-2 ring-brand-blue/30' : 'hover:shadow-md'} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
+                                                    style={{
+                                                      height: `${height}px`,
+                                                      top: snapshot.isDragging ? undefined : '2px',
+                                                      borderLeft: `3px solid ${dayColor}`,
+                                                      willChange: snapshot.isDragging ? 'transform' : undefined,
+                                                      ...provided.draggableProps.style
+                                                    }}
+                                                    onClick={() => handleEntryClick(entry)}
+                                                  >
+                                                    <div className="font-bold text-[10px] leading-tight truncate text-surface-900">
+                                                      {entry.unit_code}
+                                                    </div>
+                                                    <div className="text-[9px] leading-tight truncate text-surface-700">
+                                                      {entry.group_name}
+                                                    </div>
+                                                    <div className="text-[9px] leading-tight truncate text-surface-700">
+                                                      {entry.tutor_name || 'Tutor TBA'}
+                                                    </div>
+                                                    <div className="text-[9px] leading-tight truncate text-surface-600">
+                                                      {entry.start_time?.substring(0, 5)}-{entry.end_time?.substring(0, 5)}
+                                                    </div>
                                                   </div>
-                                                  <div className="text-[9px] leading-tight truncate text-surface-700">
-                                                    {entry.group_name}
-                                                  </div>
-                                                  <div className="text-[9px] leading-tight truncate text-surface-600">
-                                                    {entry.start_time?.substring(0, 5)}-{entry.end_time?.substring(0, 5)}
-                                                  </div>
-                                                </div>
-                                              )}
+                                                );
+
+                                                return snapshot.isDragging && typeof document !== 'undefined'
+                                                  ? createPortal(card, document.body)
+                                                  : card;
+                                              }}
                                             </Draggable>
                                           );
                                         })}

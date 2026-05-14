@@ -33,6 +33,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Routes
 // ============================================
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/public', require('./routes/public'));
 app.use('/api/degrees', require('./routes/degrees'));
 app.use('/api/trimesters', require('./routes/trimesters'));
 app.use('/api/units', require('./routes/units'));

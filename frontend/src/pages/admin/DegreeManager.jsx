@@ -69,19 +69,18 @@ export default function DegreeManager() {
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-brand-dark" style={{ fontFamily: 'var(--font-heading)' }}>
-            Degree Management
-          </h2>
-          <p className="text-sm text-surface-600 mt-1">Manage academic degrees independently.</p>
+          <p className="page-kicker">Academic structure</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Degree Management</h2>
+          <p className="page-subtitle">Manage academic degrees independently.</p>
         </div>
         <button className="btn btn-primary" onClick={() => openDegreeModal()}>
           + Create Degree
         </button>
       </div>
 
-      <div className="glass-card p-4 mb-6 bg-brand-yellow/10 border-brand-yellow">
+      <div className="glass-card p-4 mb-6 bg-brand-yellow/10 border-brand-yellow/40">
         <div className="flex items-center gap-2 text-sm text-brand-dark">
           <span>💡</span>
           <span>Tip: After creating degrees, go to <Link to="/admin/units" className="underline font-semibold">Units</Link> to add courses with automatic class generation.</span>

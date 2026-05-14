@@ -127,12 +127,11 @@ export default function UnitManager() {
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-brand-dark" style={{ fontFamily: 'var(--font-heading)' }}>
-            Unit Management
-          </h2>
-          <p className="text-sm text-surface-600 mt-1">Manage units for your courses. Class generation is handled in Timetable Manager.</p>
+          <p className="page-kicker">Course catalogue</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Unit Management</h2>
+          <p className="page-subtitle">Manage units for your courses. Class generation is handled in Timetable Manager.</p>
         </div>
         <button className="btn btn-primary" onClick={() => openUnitModal()}>
           + Create Unit

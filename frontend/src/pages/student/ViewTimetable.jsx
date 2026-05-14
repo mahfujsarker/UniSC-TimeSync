@@ -1,5 +1,5 @@
 /**
- * View Timetable — Student read-only Kanban view.
+ * View Timetable - Student read-only Kanban view.
  */
 import { useState, useEffect } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
@@ -45,9 +45,13 @@ export default function ViewTimetable() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-surface-100 mb-6" style={{ fontFamily: 'var(--font-heading)' }}>
-        📅 View Timetable
-      </h2>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Published schedule</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>View Timetable</h2>
+          <p className="page-subtitle">Choose your degree and trimester to view the read-only timetable board.</p>
+        </div>
+      </div>
 
       <div className="glass-card p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -55,7 +59,7 @@ export default function ViewTimetable() {
             <label className="form-label">Degree</label>
             <select className="form-select" value={selectedDegree} onChange={e => setSelectedDegree(e.target.value)}>
               <option value="">Select degree...</option>
-              {degrees.map(d => <option key={d.id} value={d.id}>{d.code} — {d.name}</option>)}
+              {degrees.map(d => <option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -69,12 +73,11 @@ export default function ViewTimetable() {
       </div>
 
       {!selectedTrimester ? (
-        <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-3">📋</div>
-          <p className="text-surface-400">Select a degree and trimester to view the timetable</p>
+        <div className="empty-state">
+          Select a degree and trimester to view the timetable.
         </div>
       ) : loading ? (
-        <div className="glass-card p-12 text-center text-surface-400">Loading...</div>
+        <div className="glass-card p-12 text-center text-surface-500">Loading timetable...</div>
       ) : (
         <KanbanBoard data={kanbanData} readOnly={true} />
       )}
