@@ -3,18 +3,35 @@
  * CRUD operations for tutors and tutor-unit assignments.
  */
 const pool = require('../config/db');
+const { ensureTutorAvailabilitySchema } = require('./tutorAvailabilityController');
 
 async function getAll(req, res) {
   try {
+    await ensureTutorAvailabilitySchema();
     const result = await pool.query(`
-      SELECT t.*, 
-        COALESCE(json_agg(
-          json_build_object('unit_id', u.id, 'unit_name', u.name, 'unit_code', u.code)
-        ) FILTER (WHERE u.id IS NOT NULL), '[]') as assigned_units
+      SELECT t.*,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', ta.id,
+                'trimester_id', ta.trimester_id,
+                'day_of_week', ta.day_of_week,
+                'start_time', ta.start_time,
+                'end_time', ta.end_time,
+                'trimester_name', tr.name,
+                'type', tr.type,
+                'code', tr.code
+              )
+              ORDER BY tr.name, ta.day_of_week
+            )
+            FROM tutor_availability ta
+            JOIN trimesters tr ON ta.trimester_id = tr.id
+            WHERE ta.tutor_id = t.id
+          ),
+          '[]'::jsonb
+        ) as availability
       FROM tutors t
-      LEFT JOIN tutor_units tu ON t.id = tu.tutor_id
-      LEFT JOIN units u ON tu.unit_id = u.id
-      GROUP BY t.id
       ORDER BY t.name ASC
     `);
     res.json(result.rows);
@@ -26,17 +43,33 @@ async function getAll(req, res) {
 
 async function getById(req, res) {
   try {
+    await ensureTutorAvailabilitySchema();
     const { id } = req.params;
     const result = await pool.query(`
-      SELECT t.*, 
-        COALESCE(json_agg(
-          json_build_object('unit_id', u.id, 'unit_name', u.name, 'unit_code', u.code)
-        ) FILTER (WHERE u.id IS NOT NULL), '[]') as assigned_units
+      SELECT t.*,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', ta.id,
+                'trimester_id', ta.trimester_id,
+                'day_of_week', ta.day_of_week,
+                'start_time', ta.start_time,
+                'end_time', ta.end_time,
+                'trimester_name', tr.name,
+                'type', tr.type,
+                'code', tr.code
+              )
+              ORDER BY tr.name, ta.day_of_week
+            )
+            FROM tutor_availability ta
+            JOIN trimesters tr ON ta.trimester_id = tr.id
+            WHERE ta.tutor_id = t.id
+          ),
+          '[]'::jsonb
+        ) as availability
       FROM tutors t
-      LEFT JOIN tutor_units tu ON t.id = tu.tutor_id
-      LEFT JOIN units u ON tu.unit_id = u.id
       WHERE t.id = $1
-      GROUP BY t.id
     `, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tutor not found' });
@@ -50,7 +83,8 @@ async function getById(req, res) {
 
 async function create(req, res) {
   try {
-    const { name, email, unit_ids } = req.body;
+    await ensureTutorAvailabilitySchema();
+    const { name, email } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'Name and email are required' });
     }
@@ -64,16 +98,6 @@ async function create(req, res) {
         [name, email]
       );
       const tutor = result.rows[0];
-
-      // Assign units if provided
-      if (unit_ids && unit_ids.length > 0) {
-        for (const unitId of unit_ids) {
-          await client.query(
-            'INSERT INTO tutor_units (tutor_id, unit_id) VALUES ($1, $2)',
-            [tutor.id, unitId]
-          );
-        }
-      }
 
       await client.query('COMMIT');
       res.status(201).json(tutor);
@@ -94,8 +118,9 @@ async function create(req, res) {
 
 async function update(req, res) {
   try {
+    await ensureTutorAvailabilitySchema();
     const { id } = req.params;
-    const { name, email, unit_ids } = req.body;
+    const { name, email } = req.body;
 
     const client = await pool.connect();
     try {
@@ -114,17 +139,6 @@ async function update(req, res) {
         return res.status(404).json({ error: 'Tutor not found' });
       }
 
-      // Update unit assignments if provided
-      if (unit_ids !== undefined) {
-        await client.query('DELETE FROM tutor_units WHERE tutor_id = $1', [id]);
-        for (const unitId of unit_ids) {
-          await client.query(
-            'INSERT INTO tutor_units (tutor_id, unit_id) VALUES ($1, $2)',
-            [id, unitId]
-          );
-        }
-      }
-
       await client.query('COMMIT');
       res.json(result.rows[0]);
     } catch (err) {
@@ -141,6 +155,7 @@ async function update(req, res) {
 
 async function remove(req, res) {
   try {
+    await ensureTutorAvailabilitySchema();
     const { id } = req.params;
     const result = await pool.query('DELETE FROM tutors WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {

@@ -403,7 +403,7 @@ async function validateEntry(req, res) {
       }
     }
 
-    const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, day_of_week, start_time, end_time, exclude_id);
+    const conflicts = await checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time, exclude_id);
     res.json({ 
       valid: conflicts.length === 0,
       conflicts
@@ -487,7 +487,6 @@ async function update(req, res) {
     const newDay = day_of_week || entry.day_of_week;
     const newStart = start_time || entry.start_time;
     const newEnd = end_time || entry.end_time;
-    const newTrimester = trimester_id || entry.trimester_id;
 
     const timeErrors = validateTimeRange(newStart, newEnd);
     if (timeErrors.length > 0) {

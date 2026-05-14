@@ -1,33 +1,72 @@
 /**
  * Tutor Manager Page
- * Includes tutor availability management per trimester/session.
+ * Tutor details and availability by published Teaching Period.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../api/axios';
 import Modal from '../../components/Modal';
 import Toast from '../../components/Toast';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
+function timeLabel(start, end) {
+  if (!start && !end) return 'Full Day';
+  return `${String(start).slice(0, 5)} - ${String(end).slice(0, 5)}`;
+}
+
+function buildAvailabilityState(availability = []) {
+  return availability.reduce((state, slot) => {
+    const periodId = String(slot.trimester_id);
+    if (!state[periodId]) state[periodId] = {};
+    state[periodId][slot.day_of_week] = {
+      checked: true,
+      start_time: slot.start_time ? String(slot.start_time).slice(0, 5) : '',
+      end_time: slot.end_time ? String(slot.end_time).slice(0, 5) : ''
+    };
+    return state;
+  }, {});
+}
+
+function flattenAvailability(state) {
+  return Object.entries(state).map(([trimester_id, days]) => ({
+    trimester_id,
+    days: Object.entries(days)
+      .filter(([, value]) => value.checked)
+      .map(([day_of_week, value]) => ({
+        day_of_week,
+        start_time: value.start_time || null,
+        end_time: value.end_time || null
+      }))
+  })).filter(period => period.days.length > 0);
+}
+
+function getStatus(tutor, publishedPeriods) {
+  const periodIds = new Set((tutor.availability || []).map(slot => String(slot.trimester_id)));
+  if (periodIds.size === 0) return { label: 'Not Available', className: 'badge-danger' };
+  if (periodIds.size >= publishedPeriods.length && publishedPeriods.length > 0) {
+    return { label: 'Available', className: 'badge-success' };
+  }
+  return { label: 'Partially Available', className: 'badge-warning' };
+}
+
 export default function TutorManager() {
   const [tutors, setTutors] = useState([]);
-  const [trimesters, setTrimesters] = useState([]);
+  const [teachingPeriods, setTeachingPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [savingAvailability, setSavingAvailability] = useState(null);
 
   const [showTutorModal, setShowTutorModal] = useState(false);
   const [editTutor, setEditTutor] = useState(null);
   const [tutorForm, setTutorForm] = useState({ name: '', email: '' });
 
-  const [showAvailModal, setShowAvailModal] = useState(false);
-  const [availTutor, setAvailTutor] = useState(null);
-  const [availabilities, setAvailabilities] = useState([]);
-  const [availForm, setAvailForm] = useState({
-    trimester_id: '',
-    day_of_week: 'Monday',
-    start_time: '09:00',
-    end_time: '17:00'
-  });
+  const [expandedTutorId, setExpandedTutorId] = useState('');
+  const [availabilityDrafts, setAvailabilityDrafts] = useState({});
+
+  const publishedPeriods = useMemo(
+    () => teachingPeriods.filter(period => period.status === 'published'),
+    [teachingPeriods]
+  );
 
   const fetchData = useCallback(async () => {
     try {
@@ -37,9 +76,9 @@ export default function TutorManager() {
         api.get('/trimesters')
       ]);
       setTutors(tRes.data);
-      setTrimesters(trRes.data);
+      setTeachingPeriods(trRes.data);
     } catch {
-      setToast({ message: 'Failed to load data', type: 'error' });
+      setToast({ message: 'Failed to load tutors', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -81,43 +120,71 @@ export default function TutorManager() {
     }
   };
 
-  const openAvailModal = async (tutor) => {
-    setAvailTutor(tutor);
-    setShowAvailModal(true);
-    setAvailForm({ trimester_id: trimesters[0]?.id || '', day_of_week: 'Monday', start_time: '09:00', end_time: '17:00' });
-    try {
-      const res = await api.get(`/tutor-availability/tutor/${tutor.id}`);
-      setAvailabilities(res.data);
-    } catch {
-      setAvailabilities([]);
+  const toggleTutor = (tutor) => {
+    const nextId = expandedTutorId === tutor.id ? '' : tutor.id;
+    setExpandedTutorId(nextId);
+    if (nextId && !availabilityDrafts[tutor.id]) {
+      setAvailabilityDrafts(prev => ({
+        ...prev,
+        [tutor.id]: buildAvailabilityState(tutor.availability || [])
+      }));
     }
   };
 
-  const saveAvailability = async (e) => {
-    e.preventDefault();
+  const setPeriodChecked = (tutorId, periodId, checked) => {
+    setAvailabilityDrafts(prev => {
+      const tutorState = { ...(prev[tutorId] || {}) };
+      if (!checked) {
+        delete tutorState[String(periodId)];
+      } else if (!tutorState[String(periodId)]) {
+        tutorState[String(periodId)] = {};
+      }
+      return { ...prev, [tutorId]: tutorState };
+    });
+  };
+
+  const setDayChecked = (tutorId, periodId, day, checked) => {
+    setAvailabilityDrafts(prev => {
+      const tutorState = { ...(prev[tutorId] || {}) };
+      const periodState = { ...(tutorState[String(periodId)] || {}) };
+      if (!checked) {
+        delete periodState[day];
+      } else {
+        periodState[day] = periodState[day] || { checked: true, start_time: '', end_time: '' };
+      }
+      tutorState[String(periodId)] = periodState;
+      return { ...prev, [tutorId]: tutorState };
+    });
+  };
+
+  const setDayTime = (tutorId, periodId, day, field, value) => {
+    setAvailabilityDrafts(prev => {
+      const tutorState = { ...(prev[tutorId] || {}) };
+      const periodState = { ...(tutorState[String(periodId)] || {}) };
+      periodState[day] = { ...(periodState[day] || { checked: true, start_time: '', end_time: '' }), [field]: value };
+      tutorState[String(periodId)] = periodState;
+      return { ...prev, [tutorId]: tutorState };
+    });
+  };
+
+  const saveAvailability = async (tutorId) => {
+    setSavingAvailability(tutorId);
     try {
-      await api.post('/tutor-availability', {
-        tutor_id: availTutor.id,
-        ...availForm
+      await api.put(`/tutor-availability/tutor/${tutorId}`, {
+        availability: flattenAvailability(availabilityDrafts[tutorId] || {})
       });
-      setToast({ message: 'Availability added', type: 'success' });
-      const res = await api.get(`/tutor-availability/tutor/${availTutor.id}`);
-      setAvailabilities(res.data);
-      setAvailForm({ trimester_id: availForm.trimester_id, day_of_week: 'Monday', start_time: '09:00', end_time: '17:00' });
+      setToast({ message: 'Tutor availability saved', type: 'success' });
+      await fetchData();
+      setAvailabilityDrafts(prev => {
+        const next = { ...prev };
+        delete next[tutorId];
+        return next;
+      });
+      setExpandedTutorId('');
     } catch (err) {
-      setToast({ message: err.response?.data?.error || 'Failed to add availability', type: 'error' });
-    }
-  };
-
-  const deleteAvailability = async (id) => {
-    if (!window.confirm('Delete this availability slot?')) return;
-    try {
-      await api.delete(`/tutor-availability/${id}`);
-      setToast({ message: 'Availability deleted', type: 'success' });
-      const res = await api.get(`/tutor-availability/tutor/${availTutor.id}`);
-      setAvailabilities(res.data);
-    } catch {
-      setToast({ message: 'Failed to delete availability', type: 'error' });
+      setToast({ message: err.response?.data?.error || 'Failed to save availability', type: 'error' });
+    } finally {
+      setSavingAvailability(null);
     }
   };
 
@@ -125,67 +192,154 @@ export default function TutorManager() {
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-brand-dark" style={{ fontFamily: 'var(--font-heading)' }}>
-            Tutor Management
-          </h2>
-          <p className="text-sm text-surface-600 mt-1">Manage tutors and their availability per trimester.</p>
+          <p className="page-kicker">Teaching staff</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Tutor Management</h2>
+          <p className="page-subtitle">Manage tutors and their availability across published Teaching Periods.</p>
         </div>
         <button className="btn btn-primary" onClick={() => openTutorModal()}>
           + Add Tutor
         </button>
       </div>
 
+      {publishedPeriods.length === 0 && !loading && (
+        <div className="alert-card alert-warning mb-5">
+          Publish Teaching Periods before setting tutor availability.
+        </div>
+      )}
+
       <div className="space-y-4">
         {loading ? (
           <div className="glass-card p-12 text-center text-surface-400">Loading tutors...</div>
         ) : tutors.length === 0 ? (
-          <div className="glass-card p-12 text-center text-surface-500">No tutors found. Create one to begin.</div>
+          <div className="empty-state">No tutors found. Create one to begin.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Assigned Units</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tutors.map(tutor => (
-                  <tr key={tutor.id}>
-                    <td className="font-medium text-brand-dark">{tutor.name}</td>
-                    <td>{tutor.email}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-1">
-                        {(tutor.assigned_units || []).slice(0, 3).map((u, i) => (
-                          <span key={i} className="badge badge-primary">{u.unit_code}</span>
-                        ))}
-                        {(tutor.assigned_units || []).length > 3 && (
-                          <span className="text-surface-500 text-xs">+{(tutor.assigned_units || []).length - 3}</span>
-                        )}
+          tutors.map(tutor => {
+            const status = getStatus(tutor, publishedPeriods);
+            const expanded = expandedTutorId === tutor.id;
+            const draft = availabilityDrafts[tutor.id] || buildAvailabilityState(tutor.availability || []);
+
+            return (
+              <div key={tutor.id} className="glass-card overflow-hidden transition-all duration-200">
+                <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="section-title truncate">{tutor.name}</h3>
+                      <span className={`badge ${status.className}`}>{status.label}</span>
+                    </div>
+                    <p className="text-sm text-surface-600">{tutor.email}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Object.entries((tutor.availability || []).reduce((grouped, slot) => {
+                        grouped[slot.trimester_id] = slot.trimester_name;
+                        return grouped;
+                      }, {})).slice(0, 4).map(([periodId, name]) => (
+                        <span key={periodId} className="bg-[#e6eeff] text-[#0044a3] px-2 py-0.5 rounded text-[10px] font-bold">{name}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleTutor(tutor)}>
+                      {expanded ? 'Hide Availability' : 'Availability'}
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openTutorModal(tutor)}>Edit</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteTutor(tutor.id)}>Delete</button>
+                  </div>
+                </div>
+
+                <div className={`grid transition-all duration-200 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                  <div className="overflow-hidden">
+                    <div className="border-t border-white/70 bg-white/35 p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-surface-900">Availability by Teaching Period</h4>
+                          <p className="text-xs text-surface-500">Checked days with no time set count as full-day availability.</p>
+                        </div>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => saveAvailability(tutor.id)}
+                          disabled={savingAvailability === tutor.id}
+                        >
+                          {savingAvailability === tutor.id ? 'Saving...' : 'Save Availability'}
+                        </button>
                       </div>
-                    </td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button className="text-brand-blue hover:text-brand-dark text-xs font-medium" onClick={() => openAvailModal(tutor)}>
-                          Availability
-                        </button>
-                        <button className="text-brand-blue hover:text-brand-dark text-xs font-medium" onClick={() => openTutorModal(tutor)}>
-                          Edit
-                        </button>
-                        <button className="text-danger hover:text-red-800 text-xs font-medium" onClick={() => deleteTutor(tutor.id)}>
-                          Delete
-                        </button>
+
+                      <div className="space-y-3">
+                        {publishedPeriods.map(period => {
+                          const periodId = String(period.id);
+                          const periodChecked = Boolean(draft[periodId]);
+                          return (
+                            <div key={period.id} className="rounded-lg border border-white/70 bg-white/60 p-3">
+                              <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 text-brand-blue rounded border-surface-300"
+                                  checked={periodChecked}
+                                  onChange={e => setPeriodChecked(tutor.id, period.id, e.target.checked)}
+                                />
+                                <span className="font-semibold text-surface-900">{period.name}</span>
+                                <span className="badge bg-surface-200 text-surface-700">{period.code}</span>
+                              </label>
+
+                              {periodChecked && (
+                                <div className="mt-3 grid grid-cols-1 gap-2 xl:grid-cols-5">
+                                  {DAYS.map(day => {
+                                    const dayState = draft[periodId]?.[day];
+                                    const dayChecked = Boolean(dayState?.checked);
+                                    return (
+                                      <div key={day} className="rounded-md border border-white/70 bg-white/65 p-2">
+                                        <label className="mb-2 flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="w-4 h-4 text-brand-blue rounded border-surface-300"
+                                            checked={dayChecked}
+                                            onChange={e => setDayChecked(tutor.id, period.id, day, e.target.checked)}
+                                          />
+                                          <span className="text-sm font-semibold text-surface-800">{day}</span>
+                                        </label>
+                                        {dayChecked && (
+                                          <div className="grid grid-cols-2 gap-2">
+                                            <input
+                                              type="time"
+                                              min="08:00"
+                                              max="22:00"
+                                              step="1800"
+                                              className="form-input text-xs"
+                                              value={dayState?.start_time || ''}
+                                              onChange={e => setDayTime(tutor.id, period.id, day, 'start_time', e.target.value)}
+                                              title="Leave blank for full-day availability"
+                                            />
+                                            <input
+                                              type="time"
+                                              min="08:00"
+                                              max="22:00"
+                                              step="1800"
+                                              className="form-input text-xs"
+                                              value={dayState?.end_time || ''}
+                                              onChange={e => setDayTime(tutor.id, period.id, day, 'end_time', e.target.value)}
+                                              title="Leave blank for full-day availability"
+                                            />
+                                            <div className="col-span-2 text-[10px] font-semibold text-surface-500">
+                                              {timeLabel(dayState?.start_time, dayState?.end_time)}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -204,59 +358,6 @@ export default function TutorManager() {
             <button type="button" onClick={() => setShowTutorModal(false)} className="btn btn-secondary">Cancel</button>
           </div>
         </form>
-      </Modal>
-
-      <Modal isOpen={showAvailModal} onClose={() => setShowAvailModal(false)} title={`Availability: ${availTutor?.name || ''}`} size="lg">
-        <div className="space-y-6">
-          <form onSubmit={saveAvailability} className="grid grid-cols-2 gap-4">
-            <div className="form-group">
-              <label className="form-label">Trimester / Session</label>
-              <select className="form-select" value={availForm.trimester_id} onChange={e => setAvailForm({ ...availForm, trimester_id: e.target.value })} required>
-                <option value="">Select trimester...</option>
-                {trimesters.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Day</label>
-              <select className="form-select" value={availForm.day_of_week} onChange={e => setAvailForm({ ...availForm, day_of_week: e.target.value })}>
-                {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Start Time</label>
-              <input type="time" className="form-input" value={availForm.start_time} onChange={e => setAvailForm({ ...availForm, start_time: e.target.value })} required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">End Time</label>
-              <input type="time" className="form-input" value={availForm.end_time} onChange={e => setAvailForm({ ...availForm, end_time: e.target.value })} required />
-            </div>
-            <div className="col-span-2">
-              <button type="submit" className="btn btn-primary w-full">Add Availability</button>
-            </div>
-          </form>
-
-          <div>
-            <h4 className="font-semibold text-sm mb-2">Current Availability</h4>
-            {availabilities.length === 0 ? (
-              <p className="text-sm text-surface-500 italic">No availability set.</p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {availabilities.map(avail => (
-                  <div key={avail.id} className="flex items-center justify-between bg-surface-50 p-3 rounded border border-surface-200">
-                    <div className="text-sm">
-                      <span className="font-medium">{avail.trimester_name}</span>
-                      <span className="mx-2">•</span>
-                      <span>{avail.day_of_week}</span>
-                      <span className="mx-2">•</span>
-                      <span>{avail.start_time?.substring(0,5)} - {avail.end_time?.substring(0,5)}</span>
-                    </div>
-                    <button onClick={() => deleteAvailability(avail.id)} className="text-danger text-xs font-medium">Remove</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </Modal>
     </div>
   );

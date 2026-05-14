@@ -157,6 +157,25 @@ CREATE TABLE IF NOT EXISTS tutor_units (
 );
 
 -- ============================================
+-- Tutor Availability by Teaching Period
+-- ============================================
+CREATE TABLE IF NOT EXISTS tutor_availability (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tutor_id UUID NOT NULL REFERENCES tutors(id) ON DELETE CASCADE,
+    trimester_id UUID NOT NULL REFERENCES trimesters(id) ON DELETE CASCADE,
+    day_of_week VARCHAR(10) NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')),
+    start_time TIME,
+    end_time TIME,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tutor_id, trimester_id, day_of_week),
+    CONSTRAINT valid_tutor_availability_times CHECK (
+        (start_time IS NULL AND end_time IS NULL)
+        OR (start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)
+    )
+);
+
+-- ============================================
 -- Class Instances (auto-generated based on capacity)
 -- ============================================
 CREATE TABLE IF NOT EXISTS classes (
@@ -248,6 +267,8 @@ CREATE INDEX IF NOT EXISTS idx_classes_trimester ON classes(trimester_id);
 CREATE INDEX IF NOT EXISTS idx_timetable_trimester ON timetable_entries(trimester_id);
 CREATE INDEX IF NOT EXISTS idx_trimesters_academic_year ON trimesters(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_unit_offering_patterns_unit ON unit_offering_patterns(unit_id);
+CREATE INDEX IF NOT EXISTS idx_tutor_availability_tutor ON tutor_availability(tutor_id);
+CREATE INDEX IF NOT EXISTS idx_tutor_availability_trimester ON tutor_availability(trimester_id);
 CREATE INDEX IF NOT EXISTS idx_timetable_day ON timetable_entries(day_of_week);
 CREATE INDEX IF NOT EXISTS idx_student_selections_user ON student_selections(user_id);
 CREATE INDEX IF NOT EXISTS idx_student_selections_entry ON student_selections(timetable_entry_id);

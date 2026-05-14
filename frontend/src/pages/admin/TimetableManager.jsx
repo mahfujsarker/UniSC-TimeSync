@@ -397,50 +397,51 @@ export default function TimetableManager() {
       return false;
     }
 
-    const room = suitableRooms[0];
-    const tutor = tutors[0];
-
-    if (!tutor) {
+    if (tutors.length === 0) {
       setToast({ message: 'No tutor available for auto-scheduling', type: 'warning' });
       return false;
     }
 
-    for (const day of DAYS) {
-      for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
-        const startTime = TIME_SLOTS[i];
-        const duration = cls.duration || unit?.class_duration || 1;
-        const endHour = parseInt(startTime.split(':')[0]) + duration;
-        const endTime = `${endHour.toString().padStart(2, '0')}:00`;
+    for (const room of suitableRooms) {
+      for (const tutor of tutors) {
+        for (const day of DAYS) {
+          for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
+            const startTime = TIME_SLOTS[i];
+            const duration = cls.duration || unit?.class_duration || 1;
+            const endHour = parseInt(startTime.split(':')[0]) + duration;
+            const endTime = `${endHour.toString().padStart(2, '0')}:00`;
 
-        if (endHour > 22) continue;
+            if (endHour > 22) continue;
 
-        try {
-          const res = await api.post('/timetable/check-conflicts', {
-            class_id: cls.id,
-            classroom_id: room.id,
-            tutor_id: tutor.id,
-            trimester_id: selectedTrimester,
-            day_of_week: day,
-            start_time: startTime,
-            end_time: endTime
-          });
+            try {
+              const res = await api.post('/timetable/check-conflicts', {
+                class_id: cls.id,
+                classroom_id: room.id,
+                tutor_id: tutor.id,
+                trimester_id: selectedTrimester,
+                day_of_week: day,
+                start_time: startTime,
+                end_time: endTime
+              });
 
-          if (res.data.valid) {
-            await api.post('/timetable/schedule', {
-              class_id: cls.id,
-              unit_id: cls.unit_id,
-              classroom_id: room.id,
-              tutor_id: tutor.id,
-              trimester_id: selectedTrimester,
-              day_of_week: day,
-              start_time: startTime,
-              end_time: endTime,
-              create_recurring: true
-            });
-            return true;
+              if (res.data.valid) {
+                await api.post('/timetable/schedule', {
+                  class_id: cls.id,
+                  unit_id: cls.unit_id,
+                  classroom_id: room.id,
+                  tutor_id: tutor.id,
+                  trimester_id: selectedTrimester,
+                  day_of_week: day,
+                  start_time: startTime,
+                  end_time: endTime,
+                  create_recurring: true
+                });
+                return true;
+              }
+            } catch {
+              continue;
+            }
           }
-        } catch {
-          continue;
         }
       }
     }
