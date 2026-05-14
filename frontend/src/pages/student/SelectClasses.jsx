@@ -57,9 +57,13 @@ export default function SelectClasses() {
     <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <h2 className="text-2xl font-bold text-brand-dark mb-6" style={{ fontFamily: 'var(--font-heading)' }}>
-        ✅ Select Classes
-      </h2>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Enrollment</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Select Classes</h2>
+          <p className="page-subtitle">Browse scheduled classes and enroll while capacity is available.</p>
+        </div>
+      </div>
 
       <div className="glass-card p-4 mb-6 border-t-4 border-brand-yellow">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -81,17 +85,11 @@ export default function SelectClasses() {
       </div>
 
       {!selectedTrimester ? (
-        <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-3">📋</div>
-          <p className="text-surface-400">Select a degree and trimester to browse classes</p>
-        </div>
+        <div className="empty-state">Select a degree and trimester to browse classes.</div>
       ) : loading ? (
-        <div className="glass-card p-12 text-center text-surface-400">Loading classes...</div>
+        <div className="glass-card p-12 text-center text-surface-500">Loading classes...</div>
       ) : entries.length === 0 ? (
-        <div className="glass-card p-12 text-center">
-          <div className="text-4xl mb-3">📭</div>
-          <p className="text-surface-400">No classes available for this trimester</p>
-        </div>
+        <div className="empty-state">No classes available for this trimester.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {entries.map(entry => {

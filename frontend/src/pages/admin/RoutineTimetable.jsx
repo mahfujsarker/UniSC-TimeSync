@@ -52,12 +52,11 @@ export default function RoutineTimetable() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-surface-900" style={{ fontFamily: 'var(--font-heading)' }}>
-            Timetable Routine
-          </h2>
-          <p className="text-sm text-surface-600 mt-1">
+          <p className="page-kicker">Routine view</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Timetable Routine</h2>
+          <p className="page-subtitle">
             {trimester
               ? `${trimester.name} | ${formatDate(trimester.start_date)} - ${formatDate(trimester.end_date)}`
               : 'Selected trimester/session'}
@@ -74,7 +73,7 @@ export default function RoutineTimetable() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-surface-200 p-4 mb-4">
+      <div className="glass-card p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-surface-700">
           <div><span className="font-semibold">Trimester/session:</span> {trimester?.name || '-'}</div>
           <div><span className="font-semibold">Generated:</span> {formatGeneratedDate()}</div>
@@ -83,11 +82,11 @@ export default function RoutineTimetable() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-surface-200 p-12 text-center text-surface-500">Loading routine...</div>
+        <div className="glass-card p-12 text-center text-surface-500">Loading routine...</div>
       ) : error ? (
-        <div className="bg-white rounded-lg border border-danger/30 p-12 text-center text-danger">{error}</div>
+        <div className="glass-card border-danger/30 p-12 text-center text-danger">{error}</div>
       ) : entries.length === 0 ? (
-        <div className="bg-white rounded-lg border border-surface-200 p-12 text-center text-surface-500">
+        <div className="empty-state">
           No timetable entries for this trimester/session
         </div>
       ) : (

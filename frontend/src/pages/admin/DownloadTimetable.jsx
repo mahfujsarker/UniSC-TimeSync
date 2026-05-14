@@ -70,25 +70,22 @@ export default function DownloadTimetable() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-surface-900" style={{ fontFamily: 'var(--font-heading)' }}>
-            Download Timetable
-          </h2>
-          <p className="text-sm text-surface-600 mt-1">
-            View and download trimester/session routines.
-          </p>
+          <p className="page-kicker">Exports</p>
+          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Download Timetable</h2>
+          <p className="page-subtitle">View and download trimester/session routines.</p>
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-surface-200 p-12 text-center text-surface-500">Loading trimesters...</div>
+        <div className="glass-card p-12 text-center text-surface-500">Loading trimesters...</div>
       ) : error ? (
-        <div className="bg-white rounded-lg border border-danger/30 p-12 text-center text-danger">{error}</div>
+        <div className="glass-card border-danger/30 p-12 text-center text-danger">{error}</div>
       ) : trimesters.length === 0 ? (
-        <div className="bg-white rounded-lg border border-surface-200 p-12 text-center text-surface-500">No trimesters found</div>
+        <div className="empty-state">No trimesters found.</div>
       ) : (
-        <div className="bg-white rounded-lg border border-surface-200 overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <table className="data-table">
             <thead>
               <tr>

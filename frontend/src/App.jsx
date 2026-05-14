@@ -19,6 +19,7 @@ import TutorManager from './pages/admin/TutorManager';
 import TimetableManager from './pages/admin/TimetableManager';
 import RoutineTimetable from './pages/admin/RoutineTimetable';
 import DownloadTimetable from './pages/admin/DownloadTimetable';
+import ViewOnlyTimetable from './pages/admin/ViewOnlyTimetable';
 import CalendarManager from './pages/admin/CalendarManager';
 
 // Student pages
@@ -33,7 +34,7 @@ function AppRoutes() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-primary-400 text-lg font-medium">Loading TTMS...</div>
+        <div className="text-primary-400 text-lg font-medium">Loading UniSC TimeSync...</div>
       </div>
     );
   }
@@ -43,6 +44,7 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/student'} /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/student'} /> : <Register />} />
+      <Route path="/view-only-timetable" element={<ViewOnlyTimetable publicMode />} />
 
       {/* Admin routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>}>

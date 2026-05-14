@@ -95,9 +95,14 @@ export function getRoutineCellEntries(cells, day, slot) {
   return cells.get(`${day}|${slot}`) || [];
 }
 
-export function buildRoutineHtml({ trimester, entries, generatedAt = formatGeneratedDate(), printable = false }) {
+const PROJECT_NAME = 'UniSC TimeSync';
+
+export function buildRoutineHtml({ trimester, entries, degree, generatedAt = formatGeneratedDate(), printable = false, projectName = PROJECT_NAME }) {
   const cells = buildRoutineCells(entries);
   const title = `${trimester?.name || 'Timetable'} Routine`;
+  const degreeName = degree?.name
+    ? `${degree.name}${degree.code ? ` (${degree.code})` : ''}`
+    : degree?.code || '';
 
   const rows = ROUTINE_TIME_SLOTS.map(slot => `
     <tr>
@@ -118,6 +123,7 @@ export function buildRoutineHtml({ trimester, entries, generatedAt = formatGener
         <style>
           body { font-family: Arial, sans-serif; color: #111; margin: ${printable ? '20px' : '0'}; }
           h1 { font-size: 22px; margin: 0 0 6px; }
+          .project { font-size: 12px; font-weight: 700; color: #0052c4; margin-bottom: 4px; }
           .meta { font-size: 12px; margin-bottom: 14px; color: #444; }
           table { width: 100%; border-collapse: collapse; table-layout: fixed; }
           th, td { border: 1px solid #cfd6dd; vertical-align: top; padding: 7px; font-size: 11px; }
@@ -129,8 +135,10 @@ export function buildRoutineHtml({ trimester, entries, generatedAt = formatGener
         </style>
       </head>
       <body>
+        <div class="project">${escapeHtml(projectName)}: Timetable Management System</div>
         <h1>${escapeHtml(title)}</h1>
         <div class="meta">
+          ${degreeName ? `Degree: ${escapeHtml(degreeName)} | ` : ''}
           Trimester/session: ${escapeHtml(trimester?.name || '')}
           ${trimester?.start_date ? ` | ${escapeHtml(formatDate(trimester.start_date))}` : ''}
           ${trimester?.end_date ? ` - ${escapeHtml(formatDate(trimester.end_date))}` : ''}
@@ -150,29 +158,30 @@ export function buildRoutineHtml({ trimester, entries, generatedAt = formatGener
   `;
 }
 
-function getFilename(trimester, extension) {
-  const name = (trimester?.name || 'timetable-routine')
+function getFilename(trimester, extension, degree) {
+  const degreePart = degree?.code || degree?.name || '';
+  const name = (`unisc-timesync-${degreePart}-${trimester?.name || 'timetable-routine'}`)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   return `${name || 'timetable-routine'}-routine.${extension}`;
 }
 
-export function downloadRoutineExcel(trimester, entries) {
-  const html = buildRoutineHtml({ trimester, entries });
+export function downloadRoutineExcel(trimester, entries, options = {}) {
+  const html = buildRoutineHtml({ trimester, entries, ...options });
   const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = getFilename(trimester, 'xls');
+  link.download = getFilename(trimester, 'xls', options.degree);
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
 }
 
-export function downloadRoutinePdf(trimester, entries) {
-  const html = buildRoutineHtml({ trimester, entries, printable: true });
+export function downloadRoutinePdf(trimester, entries, options = {}) {
+  const html = buildRoutineHtml({ trimester, entries, printable: true, ...options });
   const frame = document.createElement('iframe');
   frame.style.position = 'fixed';
   frame.style.right = '0';
