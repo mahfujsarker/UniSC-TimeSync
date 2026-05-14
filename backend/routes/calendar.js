@@ -8,6 +8,7 @@ const authenticateToken = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 
 router.get('/', authenticateToken, controller.getAll);
+router.get('/published', authenticateToken, controller.getPublishedAcademicCalendar);
 router.get('/:id', authenticateToken, controller.getById);
 router.post('/', authenticateToken, roleCheck('admin'), controller.create);
 router.put('/:id', authenticateToken, roleCheck('admin'), controller.update);

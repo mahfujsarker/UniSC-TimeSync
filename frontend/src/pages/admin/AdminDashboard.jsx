@@ -10,13 +10,13 @@ const NAV_ITEMS = [
   { path: '/admin', icon: 'dashboard', label: 'Dashboard', end: true },
   { path: '/admin/degrees', icon: 'degrees', label: 'Degrees & Units' },
   { path: '/admin/units', icon: 'units', label: 'Units' },
-  { path: '/admin/trimesters', icon: 'trimesters', label: 'Trimesters / Sessions' },
+  { path: '/admin/trimesters', icon: 'trimesters', label: 'Teaching Period' },
   { path: '/admin/tutors', icon: 'tutors', label: 'Tutors' },
   { path: '/admin/classrooms', icon: 'classrooms', label: 'Classrooms' },
   { path: '/admin/timetable', icon: 'timetable', label: 'Timetable' },
   { path: '/view-only-timetable', icon: 'view', label: 'View-Only Timetable' },
   { path: '/admin/download-timetable', icon: 'download', label: 'Download Timetable' },
-  { path: '/admin/calendar', icon: 'calendar', label: 'Calendar' },
+  { path: '/admin/calendar', icon: 'calendar', label: 'Academic Calendar' },
 ];
 
 export default function AdminDashboard() {

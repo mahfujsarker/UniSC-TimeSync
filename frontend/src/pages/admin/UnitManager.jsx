@@ -11,7 +11,6 @@ import Toast from '../../components/Toast';
 export default function UnitManager() {
   const [units, setUnits] = useState([]);
   const [degrees, setDegrees] = useState([]);
-  const [trimesters, setTrimesters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -23,20 +22,31 @@ export default function UnitManager() {
     degree_ids: [],
     classroom_type: 'normal',
     class_duration: 1,
-    trimester_ids: []
+    offering_patterns: []
   });
+
+  const offeringOptions = [
+    { group: 'Trimesters', options: [
+      { label: 'Trimester 1', period_type: 'TRIMESTER', period_number: 1, code: 'T1' },
+      { label: 'Trimester 2', period_type: 'TRIMESTER', period_number: 2, code: 'T2' },
+      { label: 'Trimester 3', period_type: 'TRIMESTER', period_number: 3, code: 'T3' }
+    ] },
+    { group: 'Sessions', options: [
+      { label: 'Session 1', period_type: 'SESSION', period_number: 1, code: 'S1' },
+      { label: 'Session 2', period_type: 'SESSION', period_number: 2, code: 'S2' },
+      { label: 'Session 3', period_type: 'SESSION', period_number: 3, code: 'S3' }
+    ] }
+  ];
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [unitRes, degRes, triRes] = await Promise.all([
+      const [unitRes, degRes] = await Promise.all([
         api.get('/units'),
-        api.get('/degrees'),
-        api.get('/trimesters')
+        api.get('/degrees')
       ]);
       setUnits(unitRes.data);
       setDegrees(degRes.data);
-      setTrimesters(triRes.data);
     } catch {
       setToast({ message: 'Failed to load data', type: 'error' });
     } finally {
@@ -55,7 +65,7 @@ export default function UnitManager() {
         degree_ids: (unit.degrees || []).map(d => d.id),
         classroom_type: unit.classroom_type,
         class_duration: unit.class_duration || 1,
-        trimester_ids: unit.trimester_ids || []
+        offering_patterns: unit.offering_patterns || []
       });
     } else {
       setUnitForm({
@@ -64,20 +74,30 @@ export default function UnitManager() {
         degree_ids: [],
         classroom_type: 'normal',
         class_duration: 1,
-        trimester_ids: []
+        offering_patterns: []
       });
     }
     setShowUnitModal(true);
   };
 
-  const handleTrimesterToggle = (trimesterId) => {
+  const isOfferingSelected = (option) => unitForm.offering_patterns.some(pattern =>
+    pattern.period_type === option.period_type && Number(pattern.period_number) === option.period_number
+  );
+
+  const handleOfferingToggle = (option) => {
     setUnitForm(prev => {
-      const exists = prev.trimester_ids.includes(trimesterId);
+      const exists = prev.offering_patterns.some(pattern =>
+        pattern.period_type === option.period_type && Number(pattern.period_number) === option.period_number
+      );
       if (exists) {
-        return { ...prev, trimester_ids: prev.trimester_ids.filter(id => id !== trimesterId) };
-      } else {
-        return { ...prev, trimester_ids: [...prev.trimester_ids, trimesterId] };
+        return {
+          ...prev,
+          offering_patterns: prev.offering_patterns.filter(pattern =>
+            !(pattern.period_type === option.period_type && Number(pattern.period_number) === option.period_number)
+          )
+        };
       }
+      return { ...prev, offering_patterns: [...prev.offering_patterns, option] };
     });
   };
 
@@ -122,6 +142,7 @@ export default function UnitManager() {
 
   const roomTypeLabel = (type) => type === 'lab' ? 'Computer Lab' : 'Normal Room';
   const durationLabel = (hours) => `${hours} hour${hours > 1 ? 's' : ''}`;
+  const offeringLabel = (pattern) => `${pattern.period_type === 'SESSION' ? 'Session' : 'Trimester'} ${pattern.period_number}`;
 
   return (
     <div>
@@ -164,7 +185,7 @@ export default function UnitManager() {
                   <th>Degrees</th>
                   <th>Room Type</th>
                   <th>Duration</th>
-                  <th>Trimesters</th>
+                  <th>Normally Offered In</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -195,16 +216,13 @@ export default function UnitManager() {
                     <td>{durationLabel(unit.class_duration)}</td>
                     <td>
                       <div className="flex flex-wrap gap-1">
-                        {(unit.trimester_ids || []).slice(0, 2).map(tid => {
-                          const tri = trimesters.find(t => t.id === tid);
-                          return (
-                            <span key={tid} className="bg-surface-200 text-surface-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                              {tri?.name || 'Unknown'}
-                            </span>
-                          );
-                        })}
-                        {(unit.trimester_ids || []).length > 2 && (
-                          <span className="text-surface-500 text-xs">+{unit.trimester_ids.length - 2}</span>
+                        {(unit.offering_patterns || []).slice(0, 3).map(pattern => (
+                          <span key={`${pattern.period_type}-${pattern.period_number}`} className="bg-surface-200 text-surface-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                            {offeringLabel(pattern)}
+                          </span>
+                        ))}
+                        {(unit.offering_patterns || []).length > 3 && (
+                          <span className="text-surface-500 text-xs">+{unit.offering_patterns.length - 3}</span>
                         )}
                       </div>
                     </td>
@@ -312,26 +330,28 @@ export default function UnitManager() {
           </div>
 
           <div className="form-group">
-            <label className="form-label block mb-2">Available Trimesters</label>
-            {trimesters.length === 0 ? (
-              <div className="text-sm text-surface-500 italic p-3 bg-surface-50 rounded border border-surface-200">
-                No trimesters exist. Create them first.
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto p-3 bg-surface-50 rounded border border-surface-200">
-                {trimesters.map(t => (
-                  <label key={t.id} className="flex items-center gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 text-brand-blue rounded border-surface-300"
-                      checked={unitForm.trimester_ids.includes(t.id)}
-                      onChange={() => handleTrimesterToggle(t.id)}
-                    />
-                    <span className="text-sm font-medium text-surface-700">{t.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+            <label className="form-label block mb-1">Normally Offered In</label>
+            <p className="text-xs text-surface-500 mb-2">Select the teaching periods this unit is normally offered in each year.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-surface-50 rounded border border-surface-200">
+              {offeringOptions.map(group => (
+                <div key={group.group}>
+                  <div className="text-xs font-bold text-surface-600 mb-2">{group.group}</div>
+                  <div className="space-y-2">
+                    {group.options.map(option => (
+                      <label key={option.code} className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-brand-blue rounded border-surface-300"
+                          checked={isOfferingSelected(option)}
+                          onChange={() => handleOfferingToggle(option)}
+                        />
+                        <span className="text-sm font-medium text-surface-700">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">

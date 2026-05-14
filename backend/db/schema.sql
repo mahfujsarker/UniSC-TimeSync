@@ -32,13 +32,41 @@ CREATE TABLE IF NOT EXISTS degrees (
 );
 
 -- ============================================
--- Trimesters / Sessions (associated with degrees)
+-- Academic Years
+-- ============================================
+CREATE TABLE IF NOT EXISTS academic_years (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    year INTEGER UNIQUE NOT NULL,
+    source_url TEXT,
+    source_type VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (source_type IN ('manual', 'import', 'scraped', 'pdf')),
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'reviewed', 'published')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- Teaching Periods (compatibility table name: trimesters)
 -- ============================================
 CREATE TABLE IF NOT EXISTS trimesters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL,
+    type VARCHAR(20) NOT NULL DEFAULT 'TRIMESTER' CHECK (type IN ('TRIMESTER', 'SESSION', 'SEMESTER', 'OTHER')),
+    code VARCHAR(20),
+    period_number INTEGER,
     name VARCHAR(255) NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    classes_start_date DATE,
+    classes_end_date DATE,
+    timetable_release_date DATE,
+    class_selection_open_date DATE,
+    census_date DATE,
+    exam_start_date DATE,
+    exam_end_date DATE,
+    grades_release_date DATE,
+    source_url TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'reviewed', 'published', 'archived')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT valid_dates CHECK (end_date > start_date)
@@ -84,12 +112,27 @@ CREATE TABLE IF NOT EXISTS unit_degrees (
 
 -- ============================================
 -- Unit-Trimester associations (many-to-many)
+-- Legacy compatibility. Generic offering rules use unit_offering_patterns.
 -- ============================================
 CREATE TABLE IF NOT EXISTS unit_trimesters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
     trimester_id UUID NOT NULL REFERENCES trimesters(id) ON DELETE CASCADE,
     UNIQUE(unit_id, trimester_id)
+);
+
+-- ============================================
+-- Generic Unit Offering Patterns
+-- ============================================
+CREATE TABLE IF NOT EXISTS unit_offering_patterns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('TRIMESTER', 'SESSION')),
+    period_number INTEGER NOT NULL CHECK (period_number IN (1, 2, 3)),
+    code VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(unit_id, period_type, period_number)
 );
 
 -- ============================================
@@ -181,6 +224,21 @@ CREATE TABLE IF NOT EXISTS academic_calendar (
 );
 
 -- ============================================
+-- Teaching Period Events
+-- ============================================
+CREATE TABLE IF NOT EXISTS teaching_period_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    teaching_period_id UUID NOT NULL REFERENCES trimesters(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
 -- Indexes for performance
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_unit_degrees_unit ON unit_degrees(unit_id);
@@ -188,6 +246,8 @@ CREATE INDEX IF NOT EXISTS idx_unit_degrees_degree ON unit_degrees(degree_id);
 CREATE INDEX IF NOT EXISTS idx_classes_unit ON classes(unit_id);
 CREATE INDEX IF NOT EXISTS idx_classes_trimester ON classes(trimester_id);
 CREATE INDEX IF NOT EXISTS idx_timetable_trimester ON timetable_entries(trimester_id);
+CREATE INDEX IF NOT EXISTS idx_trimesters_academic_year ON trimesters(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_unit_offering_patterns_unit ON unit_offering_patterns(unit_id);
 CREATE INDEX IF NOT EXISTS idx_timetable_day ON timetable_entries(day_of_week);
 CREATE INDEX IF NOT EXISTS idx_student_selections_user ON student_selections(user_id);
 CREATE INDEX IF NOT EXISTS idx_student_selections_entry ON student_selections(timetable_entry_id);

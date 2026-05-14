@@ -174,11 +174,13 @@ function ClassLocationMiniMap({ classrooms, unitEntries, onFocusEntry }) {
 
 export default function TimetableManager() {
   const [degrees, setDegrees] = useState([]);
+  const [academicYears, setAcademicYears] = useState([]);
   const [trimesters, setTrimesters] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [tutors, setTutors] = useState([]);
 
   const [selectedDegree, setSelectedDegree] = useState('');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
   const [selectedTrimester, setSelectedTrimester] = useState('');
 
   const [units, setUnits] = useState([]);
@@ -209,11 +211,13 @@ export default function TimetableManager() {
   useEffect(() => {
     Promise.all([
       api.get('/degrees'),
+      api.get('/trimesters/academic-years'),
       api.get('/trimesters'),
       api.get('/classrooms'),
       api.get('/tutors'),
-    ]).then(([d, tr, c, t]) => {
+    ]).then(([d, ay, tr, c, t]) => {
       setDegrees(d.data);
+      setAcademicYears(ay.data);
       setTrimesters(tr.data);
       setClassrooms(c.data.filter(cl => cl.is_available));
       setTutors(t.data);
@@ -221,11 +225,31 @@ export default function TimetableManager() {
       if (d.data.length > 0) {
         setSelectedDegree(d.data[0].id);
       }
-      if (tr.data.length > 0) {
-        setSelectedTrimester(tr.data[0].id);
+      const publishedPeriods = tr.data.filter(period => period.status === 'published');
+      const initialYearId = ay.data[0]?.id || publishedPeriods[0]?.academic_year_id || '';
+      const initialPeriod = publishedPeriods.find(period => String(period.academic_year_id) === String(initialYearId)) || publishedPeriods[0];
+      if (initialYearId) {
+        setSelectedAcademicYear(initialYearId);
+      }
+      if (initialPeriod) {
+        setSelectedTrimester(initialPeriod.id);
       }
     }).catch(() => {});
   }, []);
+
+  const teachingPeriodsForYear = useMemo(() => {
+    return trimesters.filter(period =>
+      period.status === 'published' &&
+      (!selectedAcademicYear || String(period.academic_year_id) === String(selectedAcademicYear))
+    );
+  }, [trimesters, selectedAcademicYear]);
+
+  useEffect(() => {
+    if (!selectedAcademicYear) return;
+    if (!teachingPeriodsForYear.some(period => String(period.id) === String(selectedTrimester))) {
+      setSelectedTrimester(teachingPeriodsForYear[0]?.id || '');
+    }
+  }, [selectedAcademicYear, selectedTrimester, teachingPeriodsForYear]);
 
   const loadUnits = useCallback(async () => {
     if (!selectedTrimester) return;
@@ -308,7 +332,7 @@ export default function TimetableManager() {
 
   const handleGenerateClass = async (unitId) => {
     if (!selectedTrimester) {
-      setToast({ message: 'Please select a trimester first', type: 'error' });
+      setToast({ message: 'Please select a teaching period first', type: 'error' });
       return;
     }
 
@@ -427,7 +451,7 @@ export default function TimetableManager() {
 
   const handleGenerateAll = async () => {
     if (!selectedTrimester) {
-      setToast({ message: 'Please select a trimester first', type: 'error' });
+      setToast({ message: 'Please select a teaching period first', type: 'error' });
       return;
     }
 
@@ -695,7 +719,7 @@ export default function TimetableManager() {
         <div>
           <p className="page-kicker">Scheduling board</p>
           <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Timetable Scheduler</h2>
-          <p className="page-subtitle">Generate classes, validate conflicts, and arrange the selected trimester board.</p>
+          <p className="page-subtitle">Generate classes, validate conflicts, and arrange the selected teaching period board.</p>
         </div>
         <div className="flex gap-2">
           {selectedTrimester ? (
@@ -718,7 +742,20 @@ export default function TimetableManager() {
       </div>
 
       <div className="glass-card p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[9rem_minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="form-group">
+            <label className="form-label">Academic Year</label>
+            <select
+              className="form-select"
+              value={selectedAcademicYear}
+              onChange={e => setSelectedAcademicYear(e.target.value)}
+            >
+              <option value="">All Years</option>
+              {academicYears.map(year => (
+                <option key={year.id} value={year.id}>{year.year}</option>
+              ))}
+            </select>
+          </div>
           <div className="form-group">
             <label className="form-label">Select Degree (Filter)</label>
             <select
@@ -733,14 +770,14 @@ export default function TimetableManager() {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Select Trimester / Session</label>
+            <label className="form-label">Teaching Period</label>
             <select
               className="form-select"
               value={selectedTrimester}
               onChange={e => setSelectedTrimester(e.target.value)}
             >
-              <option value="">Select trimester...</option>
-              {trimesters.map(t => (
+              <option value="">Select teaching period...</option>
+              {teachingPeriodsForYear.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -764,7 +801,7 @@ export default function TimetableManager() {
                 </div>
 
                 {!selectedTrimester ? (
-                  <div className="text-center py-6 text-surface-500 text-sm">Select a trimester for generation</div>
+                  <div className="text-center py-6 text-surface-500 text-sm">Select a teaching period for generation</div>
                 ) : loading ? (
                   <div className="text-center py-6 text-surface-400 text-sm">Loading units...</div>
                 ) : units.length === 0 ? (

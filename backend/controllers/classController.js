@@ -3,6 +3,7 @@
  * Manages class instances generated based on unit capacity.
  */
 const pool = require('../config/db');
+const { ensureAcademicSchema } = require('../utils/academicSchema');
 
 const ROOM_CAPACITIES = {
   lab: 25,
@@ -25,6 +26,7 @@ function generateGroupNames(numClasses) {
 
 async function getAll(req, res) {
   try {
+    await ensureAcademicSchema();
     const { trimester_id, unit_id, degree_id } = req.query;
     
     let query = `
@@ -67,6 +69,7 @@ async function getAll(req, res) {
 
 async function getById(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const result = await pool.query(
       `SELECT c.*, 
@@ -93,6 +96,7 @@ async function getById(req, res) {
 
 async function getByUnitAndTrimester(req, res) {
   try {
+    await ensureAcademicSchema();
     const { unit_id, trimester_id } = req.query;
     
     if (!unit_id || !trimester_id) {
@@ -124,6 +128,7 @@ async function getByUnitAndTrimester(req, res) {
 
 async function getUnscheduled(req, res) {
   try {
+    await ensureAcademicSchema();
     const { trimester_id, degree_id } = req.query;
     
     let query = `
@@ -165,6 +170,7 @@ async function getUnscheduled(req, res) {
 async function createForUnit(req, res) {
   const client = await pool.connect();
   try {
+    await ensureAcademicSchema();
     const { unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students } = req.body;
 
     if (!unit_id || !trimester_id) {
@@ -221,6 +227,7 @@ async function createForUnit(req, res) {
 async function createBatchForTrimester(req, res) {
   const client = await pool.connect();
   try {
+    await ensureAcademicSchema();
     const { trimester_id, degree_id } = req.body;
 
     if (!trimester_id) {
@@ -233,8 +240,11 @@ async function createBatchForTrimester(req, res) {
       SELECT u.*,
              EXISTS(SELECT 1 FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1) as has_existing_classes
       FROM units u
-      JOIN unit_trimesters ut ON u.id = ut.unit_id
-      WHERE ut.trimester_id = $1
+      JOIN trimesters tp ON tp.id = $1
+      JOIN unit_offering_patterns uop ON uop.unit_id = u.id
+        AND uop.period_type = tp.type
+        AND uop.period_number = tp.period_number
+      WHERE tp.status = 'published'
     `;
     const params = [trimester_id];
 
@@ -299,6 +309,7 @@ async function createBatchForTrimester(req, res) {
 
 async function update(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const { group_name, duration, max_capacity, enrolled_students } = req.body;
 
@@ -325,6 +336,7 @@ async function update(req, res) {
 
 async function remove(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const result = await pool.query('DELETE FROM classes WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {
@@ -339,6 +351,7 @@ async function remove(req, res) {
 
 async function removeByUnit(req, res) {
   try {
+    await ensureAcademicSchema();
     const { unit_id, trimester_id } = req.query;
     if (!unit_id || !trimester_id) {
       return res.status(400).json({ error: 'unit_id and trimester_id are required' });

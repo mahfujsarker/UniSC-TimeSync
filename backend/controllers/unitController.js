@@ -3,13 +3,41 @@
  * CRUD operations for units/courses.
  */
 const pool = require('../config/db');
+const { ensureAcademicSchema } = require('../utils/academicSchema');
+
+function normalizeOfferingPatterns(patterns = []) {
+  return [...new Map(patterns
+    .filter(pattern => pattern && pattern.period_type && pattern.period_number)
+    .map(pattern => {
+      const periodType = String(pattern.period_type).toUpperCase();
+      const periodNumber = Number(pattern.period_number);
+      const code = pattern.code || (periodType === 'TRIMESTER' ? `T${periodNumber}` : `S${periodNumber}`);
+      return [`${periodType}-${periodNumber}`, { period_type: periodType, period_number: periodNumber, code }];
+    })).values()]
+    .filter(pattern => ['TRIMESTER', 'SESSION'].includes(pattern.period_type) && [1, 2, 3].includes(pattern.period_number));
+}
+
+async function replaceOfferingPatterns(client, unitId, patterns) {
+  await client.query('DELETE FROM unit_offering_patterns WHERE unit_id = $1', [unitId]);
+  for (const pattern of normalizeOfferingPatterns(patterns)) {
+    await client.query(
+      `INSERT INTO unit_offering_patterns (unit_id, period_type, period_number, code)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (unit_id, period_type, period_number) DO NOTHING`,
+      [unitId, pattern.period_type, pattern.period_number, pattern.code]
+    );
+  }
+}
 
 async function getAll(req, res) {
   try {
+    await ensureAcademicSchema();
     const { degree_id, trimester_id } = req.query;
     
     let query = `
       SELECT u.*,
+             COALESCE(jsonb_agg(DISTINCT jsonb_build_object('period_type', uop.period_type, 'period_number', uop.period_number, 'code', uop.code))
+               FILTER (WHERE uop.id IS NOT NULL), '[]') as offering_patterns,
              COALESCE(jsonb_agg(DISTINCT ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
              COALESCE(jsonb_agg(DISTINCT
                 jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)
@@ -18,6 +46,7 @@ async function getAll(req, res) {
       LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
       LEFT JOIN degrees d ON ud.degree_id = d.id
       LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
+      LEFT JOIN unit_offering_patterns uop ON u.id = uop.unit_id
     `;
     const params = [];
     const conditions = [];
@@ -29,7 +58,12 @@ async function getAll(req, res) {
     
     if (trimester_id) {
       params.push(trimester_id);
-      conditions.push(`EXISTS (SELECT 1 FROM unit_trimesters ut2 WHERE ut2.unit_id = u.id AND ut2.trimester_id = $${params.length})`);
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM trimesters tp
+        JOIN unit_offering_patterns uop2 ON uop2.period_type = tp.type AND uop2.period_number = tp.period_number
+        WHERE tp.id = $${params.length} AND uop2.unit_id = u.id
+      )`);
     }
 
     if (conditions.length > 0) {
@@ -48,9 +82,12 @@ async function getAll(req, res) {
 
 async function getById(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const result = await pool.query(
       `SELECT u.*,
+              COALESCE(jsonb_agg(DISTINCT jsonb_build_object('period_type', uop.period_type, 'period_number', uop.period_number, 'code', uop.code))
+                FILTER (WHERE uop.id IS NOT NULL), '[]') as offering_patterns,
               COALESCE(jsonb_agg(DISTINCT ut.trimester_id) FILTER (WHERE ut.trimester_id IS NOT NULL), '[]') as trimester_ids,
               COALESCE(jsonb_agg(DISTINCT
                 jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)
@@ -59,6 +96,7 @@ async function getById(req, res) {
        LEFT JOIN unit_degrees ud ON u.id = ud.unit_id
        LEFT JOIN degrees d ON ud.degree_id = d.id
        LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
+       LEFT JOIN unit_offering_patterns uop ON u.id = uop.unit_id
        WHERE u.id = $1
        GROUP BY u.id`,
       [id]
@@ -75,6 +113,7 @@ async function getById(req, res) {
 
 async function getByDegree(req, res) {
   try {
+    await ensureAcademicSchema();
     const { degreeId } = req.params;
     const result = await pool.query(
       `SELECT u.*, d.name as degree_name, d.code as degree_code
@@ -94,6 +133,7 @@ async function getByDegree(req, res) {
 
 async function getByDegreeAndTrimester(req, res) {
   try {
+    await ensureAcademicSchema();
     const { degree_id, trimester_id } = req.query;
     
     if (!trimester_id) {
@@ -103,7 +143,8 @@ async function getByDegreeAndTrimester(req, res) {
     let query = `
       SELECT u.*,
              COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees,
-             COALESCE(jsonb_agg(DISTINCT ut2.trimester_id) FILTER (WHERE ut2.trimester_id IS NOT NULL), '[]') as trimester_ids,
+             COALESCE(jsonb_agg(DISTINCT jsonb_build_object('period_type', uop.period_type, 'period_number', uop.period_number, 'code', uop.code))
+               FILTER (WHERE uop.id IS NOT NULL), '[]') as offering_patterns,
              COALESCE(
                (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'group_name', c.group_name, 'duration', c.duration, 'max_capacity', c.max_capacity, 'required_room_type', c.required_room_type))
                 FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1), '[]'
@@ -111,8 +152,12 @@ async function getByDegreeAndTrimester(req, res) {
       FROM units u
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
-      JOIN unit_trimesters ut2 ON u.id = ut2.unit_id
-      WHERE ut2.trimester_id = $1
+      JOIN trimesters tp ON tp.id = $1
+      JOIN unit_offering_patterns uop_match ON uop_match.unit_id = u.id
+        AND uop_match.period_type = tp.type
+        AND uop_match.period_number = tp.period_number
+      LEFT JOIN unit_offering_patterns uop ON u.id = uop.unit_id
+      WHERE tp.status = 'published'
     `;
     const params = [trimester_id];
     
@@ -141,7 +186,8 @@ async function getByDegreeAndTrimester(req, res) {
 async function create(req, res) {
   const client = await pool.connect();
   try {
-    const { name, code, degree_ids, classroom_type, class_duration, trimester_ids } = req.body;
+    await ensureAcademicSchema();
+    const { name, code, degree_ids, classroom_type, class_duration, trimester_ids, offering_patterns } = req.body;
 
     if (!name || !code || !degree_ids || degree_ids.length === 0) {
       return res.status(400).json({ error: 'Name, code, and at least one degree_id are required' });
@@ -171,10 +217,12 @@ async function create(req, res) {
         );
       }
     }
+    await replaceOfferingPatterns(client, newUnit.id, offering_patterns || []);
 
     await client.query('COMMIT');
 
     newUnit.trimester_ids = trimester_ids || [];
+    newUnit.offering_patterns = normalizeOfferingPatterns(offering_patterns || []);
     newUnit.degrees = degree_ids.map(id => ({ id }));
 
     res.status(201).json(newUnit);
@@ -196,8 +244,9 @@ async function create(req, res) {
 async function update(req, res) {
   const client = await pool.connect();
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
-    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids } = req.body;
+    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids, offering_patterns } = req.body;
 
     await client.query('BEGIN');
 
@@ -254,6 +303,11 @@ async function update(req, res) {
       updatedUnit.trimester_ids = trimester_ids;
     }
 
+    if (Array.isArray(offering_patterns)) {
+      await replaceOfferingPatterns(client, id, offering_patterns);
+      updatedUnit.offering_patterns = normalizeOfferingPatterns(offering_patterns);
+    }
+
     await client.query('COMMIT');
     res.json(updatedUnit);
   } catch (err) {
@@ -267,6 +321,7 @@ async function update(req, res) {
 
 async function remove(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const result = await pool.query('DELETE FROM units WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {
@@ -281,6 +336,7 @@ async function remove(req, res) {
 
 async function updateEnrolledStudents(req, res) {
   try {
+    await ensureAcademicSchema();
     const { id } = req.params;
     const { total_students } = req.body;
 

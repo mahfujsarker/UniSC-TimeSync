@@ -8,6 +8,10 @@ const authenticateToken = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 
 router.get('/', authenticateToken, controller.getAll);
+router.get('/academic-years', authenticateToken, controller.getAcademicYears);
+router.post('/import-unisc', authenticateToken, roleCheck('admin'), controller.importUniSCCalendar);
+router.post('/publish', authenticateToken, roleCheck('admin'), controller.publishPeriods);
+router.put('/academic-years/:id', authenticateToken, roleCheck('admin'), controller.updateAcademicYear);
 router.get('/:id', authenticateToken, controller.getById);
 router.post('/', authenticateToken, roleCheck('admin'), controller.create);
 router.put('/:id', authenticateToken, roleCheck('admin'), controller.update);
