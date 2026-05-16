@@ -6,6 +6,7 @@ const pool = require('../config/db');
 const { ensureAcademicSchema } = require('../utils/academicSchema');
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const SCOPES = ['YEAR', 'PERIOD', 'DAY'];
 
 async function ensureTutorAvailabilitySchema() {
   await ensureAcademicSchema();
@@ -13,23 +14,37 @@ async function ensureTutorAvailabilitySchema() {
     CREATE TABLE IF NOT EXISTS tutor_availability (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       tutor_id UUID NOT NULL REFERENCES tutors(id) ON DELETE CASCADE,
-      trimester_id UUID NOT NULL REFERENCES trimesters(id) ON DELETE CASCADE,
-      day_of_week VARCHAR(10) NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')),
+      academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE,
+      trimester_id UUID REFERENCES trimesters(id) ON DELETE CASCADE,
+      availability_scope VARCHAR(20) NOT NULL DEFAULT 'DAY' CHECK (availability_scope IN ('YEAR', 'PERIOD', 'DAY')),
+      day_of_week VARCHAR(10) CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')),
       start_time TIME,
       end_time TIME,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      UNIQUE(tutor_id, trimester_id, day_of_week)
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
+    ALTER TABLE tutor_availability ADD COLUMN IF NOT EXISTS academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE;
+    ALTER TABLE tutor_availability ADD COLUMN IF NOT EXISTS availability_scope VARCHAR(20) NOT NULL DEFAULT 'DAY'
+      CHECK (availability_scope IN ('YEAR', 'PERIOD', 'DAY'));
+    ALTER TABLE tutor_availability ALTER COLUMN trimester_id DROP NOT NULL;
+    ALTER TABLE tutor_availability ALTER COLUMN day_of_week DROP NOT NULL;
     ALTER TABLE tutor_availability ALTER COLUMN start_time DROP NOT NULL;
     ALTER TABLE tutor_availability ALTER COLUMN end_time DROP NOT NULL;
+
+    UPDATE tutor_availability ta
+    SET academic_year_id = tr.academic_year_id
+    FROM trimesters tr
+    WHERE ta.trimester_id = tr.id
+      AND ta.academic_year_id IS NULL;
 
     DELETE FROM tutor_availability a
     USING tutor_availability b
     WHERE a.tutor_id = b.tutor_id
+      AND COALESCE(a.academic_year_id::text, '') = COALESCE(b.academic_year_id::text, '')
       AND a.trimester_id = b.trimester_id
       AND a.day_of_week = b.day_of_week
+      AND a.availability_scope = b.availability_scope
       AND a.created_at > b.created_at;
 
     DO $$
@@ -44,11 +59,24 @@ async function ensureTutorAvailabilitySchema() {
 
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conname = 'unique_tutor_availability_day'
+        WHERE conname = 'unique_tutor_availability_scope'
       ) THEN
         ALTER TABLE tutor_availability
-          ADD CONSTRAINT unique_tutor_availability_day
-          UNIQUE (tutor_id, trimester_id, day_of_week);
+          ADD CONSTRAINT unique_tutor_availability_scope
+          UNIQUE (tutor_id, academic_year_id, trimester_id, availability_scope, day_of_week);
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'valid_tutor_availability_scope'
+      ) THEN
+        ALTER TABLE tutor_availability
+          ADD CONSTRAINT valid_tutor_availability_scope
+          CHECK (
+            (availability_scope = 'YEAR' AND academic_year_id IS NOT NULL AND trimester_id IS NULL AND day_of_week IS NULL AND start_time IS NULL AND end_time IS NULL)
+            OR (availability_scope = 'PERIOD' AND trimester_id IS NOT NULL AND day_of_week IS NULL AND start_time IS NULL AND end_time IS NULL)
+            OR (availability_scope = 'DAY' AND trimester_id IS NOT NULL AND day_of_week IS NOT NULL)
+          );
       END IF;
 
       IF NOT EXISTS (
@@ -104,10 +132,11 @@ async function getByTutor(req, res) {
     const { trimester_id } = req.query;
 
     let query = `
-      SELECT ta.*, t.name as tutor_name, tr.name as trimester_name, tr.type, tr.code, tr.period_number
+      SELECT ta.*, t.name as tutor_name, ay.year as academic_year, tr.name as trimester_name, tr.type, tr.code, tr.period_number
       FROM tutor_availability ta
       JOIN tutors t ON ta.tutor_id = t.id
-      JOIN trimesters tr ON ta.trimester_id = tr.id
+      LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
+      LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
       WHERE ta.tutor_id = $1
     `;
     const params = [tutorId];
@@ -117,7 +146,7 @@ async function getByTutor(req, res) {
       params.push(trimester_id);
     }
 
-    query += ' ORDER BY ta.trimester_id, ta.day_of_week, ta.start_time';
+    query += ' ORDER BY ay.year, tr.name, ta.availability_scope, ta.day_of_week, ta.start_time';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -149,24 +178,50 @@ async function getByTrimester(req, res) {
 async function create(req, res) {
   try {
     await ensureTutorAvailabilitySchema();
-    const { tutor_id, trimester_id, day_of_week, start_time, end_time } = req.body;
+    const { tutor_id, trimester_id, academic_year_id, availability_scope = 'DAY', day_of_week, start_time, end_time } = req.body;
+    const scope = String(availability_scope).toUpperCase();
 
-    if (!tutor_id || !trimester_id || !day_of_week) {
-      return res.status(400).json({ error: 'Tutor, Teaching Period, and day are required' });
+    if (!tutor_id || !SCOPES.includes(scope)) {
+      return res.status(400).json({ error: 'Tutor and valid availability scope are required' });
     }
 
-    const errors = validateAvailabilityWindow(day_of_week, start_time, end_time);
+    if (scope === 'YEAR' && !academic_year_id) {
+      return res.status(400).json({ error: 'Academic Year is required for full-year availability' });
+    }
+    if (scope !== 'YEAR' && !trimester_id) {
+      return res.status(400).json({ error: 'Teaching Period is required' });
+    }
+    if (scope === 'DAY' && !day_of_week) {
+      return res.status(400).json({ error: 'Day is required for day-level availability' });
+    }
+
+    const errors = scope === 'DAY' ? validateAvailabilityWindow(day_of_week, start_time, end_time) : [];
     if (errors.length > 0) {
       return res.status(400).json({ error: errors.join(', ') });
     }
 
+    let yearId = academic_year_id || null;
+    if (trimester_id) {
+      const period = await pool.query('SELECT academic_year_id FROM trimesters WHERE id = $1 AND status = $2', [trimester_id, 'published']);
+      if (period.rows.length === 0) return res.status(400).json({ error: 'Published Teaching Period not found' });
+      yearId = period.rows[0].academic_year_id;
+    }
+
     const result = await pool.query(
-      `INSERT INTO tutor_availability (tutor_id, trimester_id, day_of_week, start_time, end_time)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (tutor_id, trimester_id, day_of_week)
+      `INSERT INTO tutor_availability (tutor_id, academic_year_id, trimester_id, availability_scope, day_of_week, start_time, end_time)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (tutor_id, academic_year_id, trimester_id, availability_scope, day_of_week)
        DO UPDATE SET start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time, updated_at = NOW()
        RETURNING *`,
-      [tutor_id, trimester_id, day_of_week, normalizeTime(start_time), normalizeTime(end_time)]
+      [
+        tutor_id,
+        yearId,
+        scope === 'YEAR' ? null : trimester_id,
+        scope,
+        scope === 'DAY' ? day_of_week : null,
+        scope === 'DAY' ? normalizeTime(start_time) : null,
+        scope === 'DAY' ? normalizeTime(end_time) : null
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -196,15 +251,41 @@ async function remove(req, res) {
 async function checkAvailability(tutor_id, trimester_id, day_of_week, start_time, end_time) {
   await ensureTutorAvailabilitySchema();
   const result = await pool.query(
-    `SELECT * FROM tutor_availability
-     WHERE tutor_id = $1 AND trimester_id = $2 AND day_of_week = $3
-       AND (
-        (start_time IS NULL AND end_time IS NULL)
-        OR (start_time <= $4 AND end_time >= $5)
-       )`,
+    `WITH selected_period AS (
+       SELECT id, academic_year_id FROM trimesters WHERE id = $2
+     ),
+     day_rules AS (
+       SELECT ta.*
+       FROM tutor_availability ta
+       JOIN selected_period sp ON ta.trimester_id = sp.id
+       WHERE ta.tutor_id = $1 AND ta.availability_scope = 'DAY'
+     )
+     SELECT CASE
+       WHEN EXISTS (SELECT 1 FROM day_rules) THEN EXISTS (
+         SELECT 1 FROM day_rules
+         WHERE day_of_week = $3
+           AND (
+             (start_time IS NULL AND end_time IS NULL)
+             OR (start_time <= $4 AND end_time >= $5)
+           )
+       )
+       WHEN EXISTS (
+         SELECT 1
+         FROM tutor_availability ta
+         JOIN selected_period sp ON ta.trimester_id = sp.id
+         WHERE ta.tutor_id = $1 AND ta.availability_scope = 'PERIOD'
+       ) THEN true
+       WHEN EXISTS (
+         SELECT 1
+         FROM tutor_availability ta
+         JOIN selected_period sp ON ta.academic_year_id = sp.academic_year_id
+         WHERE ta.tutor_id = $1 AND ta.availability_scope = 'YEAR'
+       ) THEN true
+       ELSE false
+     END AS available`,
     [tutor_id, trimester_id, day_of_week, start_time, end_time]
   );
-  return result.rows.length > 0;
+  return Boolean(result.rows[0]?.available);
 }
 
 async function replaceForTutor(req, res) {
@@ -212,7 +293,7 @@ async function replaceForTutor(req, res) {
   try {
     await ensureTutorAvailabilitySchema();
     const { tutorId } = req.params;
-    const { availability = [] } = req.body;
+    const { availability = [], year_availability = [] } = req.body;
 
     await client.query('BEGIN');
 
@@ -223,13 +304,41 @@ async function replaceForTutor(req, res) {
     }
 
     const rows = [];
+    for (const yearId of year_availability) {
+      const academicYear = await client.query(
+        `SELECT id FROM academic_years WHERE id = $1 AND status = 'published'`,
+        [yearId]
+      );
+      if (academicYear.rows.length === 0) continue;
+      rows.push({
+        academic_year_id: yearId,
+        trimester_id: null,
+        availability_scope: 'YEAR',
+        day_of_week: null,
+        start_time: null,
+        end_time: null
+      });
+    }
+
     for (const period of availability) {
-      if (!period?.trimester_id || !Array.isArray(period.days)) continue;
+      if (!period?.trimester_id) continue;
       const teachingPeriod = await client.query(
-        `SELECT id FROM trimesters WHERE id = $1 AND status = 'published'`,
+        `SELECT id, academic_year_id FROM trimesters WHERE id = $1 AND status = 'published'`,
         [period.trimester_id]
       );
       if (teachingPeriod.rows.length === 0) continue;
+
+      if (!Array.isArray(period.days) || period.days.length === 0 || period.full_period) {
+        rows.push({
+          academic_year_id: teachingPeriod.rows[0].academic_year_id,
+          trimester_id: period.trimester_id,
+          availability_scope: 'PERIOD',
+          day_of_week: null,
+          start_time: null,
+          end_time: null
+        });
+        continue;
+      }
 
       for (const day of period.days) {
         const dayName = day.day_of_week;
@@ -239,7 +348,9 @@ async function replaceForTutor(req, res) {
           return res.status(400).json({ error: `${dayName}: ${errors.join(', ')}` });
         }
         rows.push({
+          academic_year_id: teachingPeriod.rows[0].academic_year_id,
           trimester_id: period.trimester_id,
+          availability_scope: 'DAY',
           day_of_week: dayName,
           start_time: normalizeTime(day.start_time),
           end_time: normalizeTime(day.end_time)
@@ -250,19 +361,20 @@ async function replaceForTutor(req, res) {
     await client.query('DELETE FROM tutor_availability WHERE tutor_id = $1', [tutorId]);
     for (const row of rows) {
       await client.query(
-        `INSERT INTO tutor_availability (tutor_id, trimester_id, day_of_week, start_time, end_time)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [tutorId, row.trimester_id, row.day_of_week, row.start_time, row.end_time]
+        `INSERT INTO tutor_availability (tutor_id, academic_year_id, trimester_id, availability_scope, day_of_week, start_time, end_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [tutorId, row.academic_year_id, row.trimester_id, row.availability_scope, row.day_of_week, row.start_time, row.end_time]
       );
     }
     await client.query('COMMIT');
 
     const result = await pool.query(
-      `SELECT ta.*, tr.name as trimester_name, tr.type, tr.code
+      `SELECT ta.*, ay.year as academic_year, tr.name as trimester_name, tr.type, tr.code
        FROM tutor_availability ta
-       JOIN trimesters tr ON ta.trimester_id = tr.id
+       LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
+       LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
        WHERE ta.tutor_id = $1
-       ORDER BY tr.name, ta.day_of_week`,
+       ORDER BY ay.year, tr.name, ta.availability_scope, ta.day_of_week`,
       [tutorId]
     );
     res.json(result.rows);

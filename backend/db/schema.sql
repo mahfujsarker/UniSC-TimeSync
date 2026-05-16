@@ -162,13 +162,20 @@ CREATE TABLE IF NOT EXISTS tutor_units (
 CREATE TABLE IF NOT EXISTS tutor_availability (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tutor_id UUID NOT NULL REFERENCES tutors(id) ON DELETE CASCADE,
-    trimester_id UUID NOT NULL REFERENCES trimesters(id) ON DELETE CASCADE,
-    day_of_week VARCHAR(10) NOT NULL CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')),
+    academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE,
+    trimester_id UUID REFERENCES trimesters(id) ON DELETE CASCADE,
+    availability_scope VARCHAR(20) NOT NULL DEFAULT 'DAY' CHECK (availability_scope IN ('YEAR', 'PERIOD', 'DAY')),
+    day_of_week VARCHAR(10) CHECK (day_of_week IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')),
     start_time TIME,
     end_time TIME,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(tutor_id, trimester_id, day_of_week),
+    UNIQUE(tutor_id, academic_year_id, trimester_id, availability_scope, day_of_week),
+    CONSTRAINT valid_tutor_availability_scope CHECK (
+        (availability_scope = 'YEAR' AND academic_year_id IS NOT NULL AND trimester_id IS NULL AND day_of_week IS NULL AND start_time IS NULL AND end_time IS NULL)
+        OR (availability_scope = 'PERIOD' AND trimester_id IS NOT NULL AND day_of_week IS NULL AND start_time IS NULL AND end_time IS NULL)
+        OR (availability_scope = 'DAY' AND trimester_id IS NOT NULL AND day_of_week IS NOT NULL)
+    ),
     CONSTRAINT valid_tutor_availability_times CHECK (
         (start_time IS NULL AND end_time IS NULL)
         OR (start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)

@@ -971,6 +971,10 @@ export default function TimetableManager() {
                                         {cellEntries.map((entry, entryIndex) => {
                                           const { height } = calculateCardStyle(entry);
                                           const dayColor = DAY_COLORS[day] || '#6366f1';
+                                          const hasTutorAvailabilityConflict = Boolean(entry.tutor_availability_conflict);
+                                          const conflictTitle = hasTutorAvailabilityConflict
+                                            ? 'Current tutor is no longer available at this time. Assign a new tutor or move the class.'
+                                            : undefined;
 
                                           return (
                                             <Draggable key={entry.id} draggableId={String(entry.id)} index={entryIndex}>
@@ -981,11 +985,12 @@ export default function TimetableManager() {
                                                     {...provided.draggableProps}
                                                     {...provided.dragHandleProps}
                                                     id={`timetable-entry-${entry.id}`}
-                                                    className={`${snapshot.isDragging ? 'z-50' : 'absolute left-1 right-1 z-10'} rounded-lg p-1 cursor-grab overflow-hidden text-[10px] border ${colors.bg} ${colors.border} shadow-sm backdrop-blur ${snapshot.isDragging ? 'shadow-xl cursor-grabbing ring-2 ring-brand-blue/30' : 'hover:shadow-md'} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
+                                                    className={`${snapshot.isDragging ? 'z-50' : 'absolute left-1 right-1 z-10'} rounded-lg p-1 cursor-grab overflow-hidden text-[10px] border ${hasTutorAvailabilityConflict ? 'bg-amber-50 border-amber-400 opacity-60 ring-2 ring-amber-400/40' : `${colors.bg} ${colors.border}`} shadow-sm backdrop-blur ${snapshot.isDragging ? 'shadow-xl cursor-grabbing ring-2 ring-brand-blue/30' : 'hover:shadow-md'} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
+                                                    title={conflictTitle}
                                                     style={{
                                                       height: `${height}px`,
                                                       top: snapshot.isDragging ? undefined : '2px',
-                                                      borderLeft: `3px solid ${dayColor}`,
+                                                      borderLeft: `3px solid ${hasTutorAvailabilityConflict ? '#f59e0b' : dayColor}`,
                                                       willChange: snapshot.isDragging ? 'transform' : undefined,
                                                       ...provided.draggableProps.style
                                                     }}
@@ -1003,6 +1008,12 @@ export default function TimetableManager() {
                                                     <div className="text-[9px] leading-tight truncate text-surface-600">
                                                       {entry.start_time?.substring(0, 5)}-{entry.end_time?.substring(0, 5)}
                                                     </div>
+                                                    {hasTutorAvailabilityConflict && (
+                                                      <div className="mt-0.5 flex items-center gap-1 rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold leading-tight text-amber-800">
+                                                        <span aria-hidden="true">!</span>
+                                                        <span className="truncate">Assign new tutor</span>
+                                                      </div>
+                                                    )}
                                                   </div>
                                                 );
 
@@ -1038,6 +1049,12 @@ export default function TimetableManager() {
         size="lg"
       >
         <form onSubmit={handleScheduleSubmit} className="space-y-4">
+          {editingEntry?.tutor_availability_conflict && (
+            <div className="alert-card alert-warning">
+              Current tutor is no longer available at this time. Assign a new tutor or move the class.
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">Classroom</label>
             <select 

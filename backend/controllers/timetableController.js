@@ -4,7 +4,10 @@
  * Supports grid-based scheduling (classrooms x time slots).
  */
 const pool = require('../config/db');
-const { checkAvailability: checkTutorAvailability } = require('./tutorAvailabilityController');
+const {
+  checkAvailability: checkTutorAvailability,
+  ensureTutorAvailabilitySchema
+} = require('./tutorAvailabilityController');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time, excludeId = null) {
   const conflicts = [];
@@ -205,6 +208,7 @@ function validateTimeRange(start_time, end_time) {
 
 async function getAll(req, res) {
   try {
+    await ensureTutorAvailabilitySchema();
     const { trimester_id, degree_id, classroom_id, day_of_week } = req.query;
     let query = `
       SELECT te.*,
@@ -213,7 +217,38 @@ async function getAll(req, res) {
         t.name as tutor_name, t.email as tutor_email,
         d.name as degree_name, d.code as degree_code,
         tr.name as trimester_name,
-        cl.group_name, cl.required_room_type, cl.duration as class_duration
+        cl.group_name, cl.required_room_type, cl.duration as class_duration,
+        CASE
+          WHEN EXISTS (
+            SELECT 1 FROM tutor_availability ta
+            WHERE ta.tutor_id = te.tutor_id
+              AND ta.trimester_id = te.trimester_id
+              AND ta.availability_scope = 'DAY'
+          ) THEN NOT EXISTS (
+            SELECT 1 FROM tutor_availability ta
+            WHERE ta.tutor_id = te.tutor_id
+              AND ta.trimester_id = te.trimester_id
+              AND ta.availability_scope = 'DAY'
+              AND ta.day_of_week = te.day_of_week
+              AND (
+                (ta.start_time IS NULL AND ta.end_time IS NULL)
+                OR (ta.start_time <= te.start_time AND ta.end_time >= te.end_time)
+              )
+          )
+          WHEN EXISTS (
+            SELECT 1 FROM tutor_availability ta
+            WHERE ta.tutor_id = te.tutor_id
+              AND ta.trimester_id = te.trimester_id
+              AND ta.availability_scope = 'PERIOD'
+          ) THEN false
+          WHEN EXISTS (
+            SELECT 1 FROM tutor_availability ta
+            WHERE ta.tutor_id = te.tutor_id
+              AND ta.academic_year_id = tr.academic_year_id
+              AND ta.availability_scope = 'YEAR'
+          ) THEN false
+          ELSE true
+        END as tutor_availability_conflict
       FROM timetable_entries te
       JOIN units u ON te.unit_id = u.id
       JOIN classes cl ON te.class_id = cl.id

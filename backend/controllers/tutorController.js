@@ -15,7 +15,10 @@ async function getAll(req, res) {
             SELECT jsonb_agg(
               jsonb_build_object(
                 'id', ta.id,
+                'academic_year_id', ta.academic_year_id,
+                'academic_year', ay.year,
                 'trimester_id', ta.trimester_id,
+                'availability_scope', ta.availability_scope,
                 'day_of_week', ta.day_of_week,
                 'start_time', ta.start_time,
                 'end_time', ta.end_time,
@@ -26,7 +29,8 @@ async function getAll(req, res) {
               ORDER BY tr.name, ta.day_of_week
             )
             FROM tutor_availability ta
-            JOIN trimesters tr ON ta.trimester_id = tr.id
+            LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
+            LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
             WHERE ta.tutor_id = t.id
           ),
           '[]'::jsonb
@@ -52,7 +56,10 @@ async function getById(req, res) {
             SELECT jsonb_agg(
               jsonb_build_object(
                 'id', ta.id,
+                'academic_year_id', ta.academic_year_id,
+                'academic_year', ay.year,
                 'trimester_id', ta.trimester_id,
+                'availability_scope', ta.availability_scope,
                 'day_of_week', ta.day_of_week,
                 'start_time', ta.start_time,
                 'end_time', ta.end_time,
@@ -63,7 +70,8 @@ async function getById(req, res) {
               ORDER BY tr.name, ta.day_of_week
             )
             FROM tutor_availability ta
-            JOIN trimesters tr ON ta.trimester_id = tr.id
+            LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
+            LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
             WHERE ta.tutor_id = t.id
           ),
           '[]'::jsonb
