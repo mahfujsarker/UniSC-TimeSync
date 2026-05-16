@@ -6,6 +6,8 @@ async function ensureAcademicSchema() {
   if (ensured) return;
 
   await pool.query(`
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
     CREATE TABLE IF NOT EXISTS academic_years (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       year INTEGER UNIQUE NOT NULL,
@@ -51,16 +53,60 @@ async function ensureAcademicSchema() {
     CREATE TABLE IF NOT EXISTS unit_offering_patterns (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
-      period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('TRIMESTER', 'SESSION')),
-      period_number INTEGER NOT NULL CHECK (period_number IN (1, 2, 3)),
+      period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('TRIMESTER', 'SESSION', 'SEMESTER')),
+      period_number INTEGER NOT NULL CHECK (
+        (period_type = 'TRIMESTER' AND period_number BETWEEN 1 AND 3)
+        OR (period_type = 'SEMESTER' AND period_number BETWEEN 1 AND 2)
+        OR (period_type = 'SESSION' AND period_number BETWEEN 1 AND 8)
+      ),
       code VARCHAR(20) NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       UNIQUE(unit_id, period_type, period_number)
     );
 
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS degree_type VARCHAR(100);
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS campus VARCHAR(255);
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS study_mode VARCHAR(100);
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS duration VARCHAR(100);
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS source_url TEXT;
+    ALTER TABLE degrees ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'published'
+      CHECK (status IN ('draft', 'reviewed', 'published', 'archived'));
+
+    ALTER TABLE units ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE units ADD COLUMN IF NOT EXISTS prerequisites TEXT;
+    ALTER TABLE units ADD COLUMN IF NOT EXISTS credit_points VARCHAR(50);
+    ALTER TABLE units ADD COLUMN IF NOT EXISTS source_url TEXT;
+    ALTER TABLE units ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'published'
+      CHECK (status IN ('draft', 'reviewed', 'published', 'archived'));
+
+    CREATE TABLE IF NOT EXISTS degree_course_imports (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      source_url TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'reviewed', 'published', 'archived')),
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      published_at TIMESTAMP WITH TIME ZONE
+    );
+
     CREATE UNIQUE INDEX IF NOT EXISTS idx_trimesters_period_identity
       ON trimesters (academic_year_id, type, period_number, code, name);
+  `);
+
+  await pool.query(`
+    ALTER TABLE unit_offering_patterns DROP CONSTRAINT IF EXISTS unit_offering_patterns_period_type_check;
+    ALTER TABLE unit_offering_patterns DROP CONSTRAINT IF EXISTS unit_offering_patterns_period_number_check;
+    ALTER TABLE unit_offering_patterns ADD CONSTRAINT unit_offering_patterns_period_type_check
+      CHECK (period_type IN ('TRIMESTER', 'SESSION', 'SEMESTER'));
+    ALTER TABLE unit_offering_patterns ADD CONSTRAINT unit_offering_patterns_period_number_check
+      CHECK (
+        (period_type = 'TRIMESTER' AND period_number BETWEEN 1 AND 3)
+        OR (period_type = 'SEMESTER' AND period_number BETWEEN 1 AND 2)
+        OR (period_type = 'SESSION' AND period_number BETWEEN 1 AND 8)
+      );
   `);
 
   await backfillAcademicYears();
@@ -135,8 +181,12 @@ async function backfillUnitOfferingPatterns() {
     SELECT DISTINCT ut.unit_id, t.type, t.period_number, t.code
     FROM unit_trimesters ut
     JOIN trimesters t ON ut.trimester_id = t.id
-    WHERE t.type IN ('TRIMESTER', 'SESSION')
-      AND t.period_number IN (1, 2, 3)
+    WHERE t.type IN ('TRIMESTER', 'SESSION', 'SEMESTER')
+      AND (
+        (t.type = 'TRIMESTER' AND t.period_number BETWEEN 1 AND 3)
+        OR (t.type = 'SEMESTER' AND t.period_number BETWEEN 1 AND 2)
+        OR (t.type = 'SESSION' AND t.period_number BETWEEN 1 AND 8)
+      )
       AND t.code IS NOT NULL
     ON CONFLICT (unit_id, period_type, period_number) DO NOTHING
   `);

@@ -24,13 +24,13 @@ export default function KanbanBoard({ data, onDragEnd, onCardClick, readOnly = f
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto liquid-scroll">
         <div className="grid grid-cols-5 gap-4 min-w-[900px]">
           {DAYS.map(day => (
             <Droppable key={day} droppableId={day} isDropDisabled={readOnly}>
               {(provided, snapshot) => (
                 <div
-                  className={`rounded-lg ${snapshot.isDraggingOver ? 'bg-green-50' : 'bg-surface-50'} min-h-[200px] p-2`}
+                  className={`rounded-2xl border border-white/75 min-h-[200px] p-2 transition-all duration-200 ${snapshot.isDraggingOver ? 'bg-emerald-50/80 ring-2 ring-emerald-400/50' : 'bg-white/48'}`}
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                 >
@@ -72,6 +72,7 @@ export default function KanbanBoard({ data, onDragEnd, onCardClick, readOnly = f
                           style={{
                             borderLeftColor: DAY_COLORS[day],
                             borderLeftWidth: 4,
+                            willChange: snapshot.isDragging ? 'transform' : undefined,
                             ...provided.draggableProps.style
                           }}
                           onClick={() => onCardClick?.(entry)}
@@ -85,7 +86,7 @@ export default function KanbanBoard({ data, onDragEnd, onCardClick, readOnly = f
                             )}
                           </div>
                           <div className="text-xs text-brand-dark mb-1 font-medium">
-                            {entry.unit_name || 'Unknown Unit'}
+                            {entry.unit_name || 'Unknown Course'}
                           </div>
                           <div className="text-xs text-surface-600 mb-1">
                             {entry.group_name}

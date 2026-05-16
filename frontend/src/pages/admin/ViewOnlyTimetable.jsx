@@ -147,14 +147,14 @@ export default function ViewOnlyTimetable({ publicMode = false }) {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Trimester / Session</label>
+            <label className="form-label">Teaching Period</label>
             <select
               className="form-select"
               value={selectedTrimester}
               onChange={e => handleTrimesterChange(e.target.value)}
               disabled={loadingLookups}
             >
-              <option value="">Select trimester...</option>
+              <option value="">Select teaching period...</option>
               {trimesters.map(trimester => (
                 <option key={trimester.id} value={trimester.id}>{trimester.name}</option>
               ))}
@@ -178,11 +178,11 @@ export default function ViewOnlyTimetable({ publicMode = false }) {
       </div>
 
       {!selectedDegree || !selectedTrimester ? (
-        <div className="empty-state">Select a degree and trimester/session to view the routine.</div>
+        <div className="empty-state">Select a degree and teaching period to view the routine.</div>
       ) : loadingEntries ? (
         <div className="glass-card p-12 text-center text-surface-500">Loading timetable...</div>
       ) : entries.length === 0 ? (
-        <div className="empty-state">No timetable entries found for this degree and trimester/session.</div>
+        <div className="empty-state">No timetable entries found for this degree and teaching period.</div>
       ) : (
         <RoutineTable entries={entries} />
       )}

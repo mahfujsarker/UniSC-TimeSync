@@ -3,6 +3,7 @@
  * Handles student-specific operations: view timetable, enroll, unenroll.
  */
 const pool = require('../config/db');
+const { ensureAcademicSchema } = require('../utils/academicSchema');
 
 /**
  * GET /api/student/timetable
@@ -10,6 +11,7 @@ const pool = require('../config/db');
  */
 async function viewTimetable(req, res) {
   try {
+    await ensureAcademicSchema();
     const { degree_id, trimester_id } = req.query;
     
     let query = `
@@ -27,7 +29,7 @@ async function viewTimetable(req, res) {
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
       JOIN trimesters tr ON te.trimester_id = tr.id
-      WHERE 1=1
+      WHERE u.status = 'published' AND d.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -56,6 +58,7 @@ async function viewTimetable(req, res) {
  */
 async function enroll(req, res) {
   try {
+    await ensureAcademicSchema();
     const { timetable_entry_id } = req.body;
     const userId = req.user.id;
 
@@ -123,6 +126,7 @@ async function enroll(req, res) {
  */
 async function myClasses(req, res) {
   try {
+    await ensureAcademicSchema();
     const userId = req.user.id;
     const result = await pool.query(
       `SELECT ss.id as selection_id, ss.created_at as enrolled_at,
@@ -139,6 +143,8 @@ async function myClasses(req, res) {
        JOIN tutors t ON te.tutor_id = t.id
        JOIN trimesters tr ON te.trimester_id = tr.id
        WHERE ss.user_id = $1
+         AND u.status = 'published'
+         AND d.status = 'published'
        GROUP BY ss.id, te.id, u.id, c.id, t.id, d.id, tr.id
        ORDER BY te.day_of_week, te.start_time`,
       [userId]

@@ -8,8 +8,7 @@ import api from '../../api/axios';
 
 const NAV_ITEMS = [
   { path: '/admin', icon: 'dashboard', label: 'Dashboard', end: true },
-  { path: '/admin/degrees', icon: 'degrees', label: 'Degrees & Units' },
-  { path: '/admin/units', icon: 'units', label: 'Units' },
+  { path: '/admin/degrees', icon: 'degrees', label: 'Degree & Courses' },
   { path: '/admin/trimesters', icon: 'trimesters', label: 'Teaching Period' },
   { path: '/admin/tutors', icon: 'tutors', label: 'Tutors' },
   { path: '/admin/classrooms', icon: 'classrooms', label: 'Classrooms' },
@@ -51,7 +50,7 @@ function MiniBar({ label, value, max, detail }) {
 
 export function AdminHome() {
   const [degrees, setDegrees] = useState([]);
-  const [units, setUnits] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [tutors, setTutors] = useState([]);
   const [trimesters, setTrimesters] = useState([]);
@@ -66,16 +65,16 @@ export function AdminHome() {
 
     Promise.all([
       api.get('/degrees'),
-      api.get('/units'),
+      api.get('/courses'),
       api.get('/classrooms'),
       api.get('/tutors'),
       api.get('/trimesters')
     ])
-      .then(([degreeRes, unitRes, classroomRes, tutorRes, trimesterRes]) => {
+      .then(([degreeRes, courseRes, classroomRes, tutorRes, trimesterRes]) => {
         if (!active) return;
 
         setDegrees(degreeRes.data);
-        setUnits(unitRes.data);
+        setCourses(courseRes.data);
         setClassrooms(classroomRes.data);
         setTutors(tutorRes.data);
         setTrimesters(trimesterRes.data);
@@ -163,7 +162,7 @@ export function AdminHome() {
           <p className="page-subtitle">UniSC TimeSync: Timetable Management System dashboard for rooms, tutors, and trimester activity.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/admin/units" className="btn btn-secondary btn-sm">Create Degree / Unit</Link>
+          <Link to="/admin/degrees" className="btn btn-secondary btn-sm">Create Degree / Course</Link>
           <Link to="/admin/classrooms" className="btn btn-secondary btn-sm">Add Classroom</Link>
           <Link to="/admin/tutors" className="btn btn-secondary btn-sm">Add Tutor</Link>
           <Link to="/admin/timetable" className="btn btn-primary btn-sm">Open Scheduler</Link>
@@ -179,11 +178,11 @@ export function AdminHome() {
             <p className="text-sm text-surface-600 mt-1">
               {selectedTrimesterData
                 ? `${selectedTrimesterData.name} runs from ${new Date(selectedTrimesterData.start_date).toLocaleDateString()} to ${new Date(selectedTrimesterData.end_date).toLocaleDateString()}.`
-                : 'Choose a trimester/session to populate operational metrics.'}
+                : 'Choose a teaching period to populate operational metrics.'}
             </p>
           </div>
           <div className="form-group">
-            <label className="form-label">Trimester / Session</label>
+            <label className="form-label">Teaching Period</label>
             <select
               className="form-select"
               value={selectedTrimester}
@@ -193,7 +192,7 @@ export function AdminHome() {
                 if (!e.target.value) setEntries([]);
               }}
             >
-              <option value="">Select trimester...</option>
+              <option value="">Select teaching period...</option>
               {trimesters.map(trimester => (
                 <option key={trimester.id} value={trimester.id}>{trimester.name}</option>
               ))}
@@ -211,10 +210,10 @@ export function AdminHome() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
           <StatCard label="Degrees" value={degrees.length} detail="Academic programs" />
-          <StatCard label="Units" value={units.length} detail="Courses available" tone="green" />
+          <StatCard label="Courses" value={courses.length} detail="Courses available" tone="green" />
           <StatCard label="Classrooms" value={classrooms.length} detail={`${classrooms.filter(room => room.is_available).length} available`} tone="yellow" />
           <StatCard label="Tutors" value={tutors.length} detail="Teaching staff" />
-          <StatCard label="Trimesters" value={trimesters.length} detail="Sessions configured" tone="green" />
+          <StatCard label="Teaching Periods" value={trimesters.length} detail="Periods configured" tone="green" />
           <StatCard label="Total Classes" value={entriesLoading ? '...' : entries.length} detail="Scheduled in selected trimester" tone="yellow" />
           <StatCard label="Room Usage" value={dashboardData.roomUtilization.length} detail="Rooms with bookings" tone="green" />
         </div>

@@ -76,13 +76,13 @@ function escapeHtml(value) {
 }
 
 function getEntryHtml(entry) {
-  const unitName = entry.unit_name || 'Unknown Unit';
-  const unitCode = entry.unit_code || 'N/A';
+  const courseName = entry.unit_name || 'Unknown Course';
+  const courseCode = entry.unit_code || 'N/A';
   const degree = entry.degrees?.length ? entry.degrees.join(', ') : entry.degree_name || 'N/A';
 
   return `
     <div class="routine-class">
-      <div class="routine-title">${escapeHtml(unitName)} (${escapeHtml(unitCode)})</div>
+      <div class="routine-title">${escapeHtml(courseName)} (${escapeHtml(courseCode)})</div>
       <div>Room: ${escapeHtml(entry.room_number || 'TBA')}</div>
       <div>Tutor: ${escapeHtml(entry.tutor_name || 'TBA')}</div>
       <div>Degree: ${escapeHtml(degree)}</div>
@@ -139,7 +139,7 @@ export function buildRoutineHtml({ trimester, entries, degree, generatedAt = for
         <h1>${escapeHtml(title)}</h1>
         <div class="meta">
           ${degreeName ? `Degree: ${escapeHtml(degreeName)} | ` : ''}
-          Trimester/session: ${escapeHtml(trimester?.name || '')}
+          Teaching period: ${escapeHtml(trimester?.name || '')}
           ${trimester?.start_date ? ` | ${escapeHtml(formatDate(trimester.start_date))}` : ''}
           ${trimester?.end_date ? ` - ${escapeHtml(formatDate(trimester.end_date))}` : ''}
           | Generated: ${escapeHtml(generatedAt)}

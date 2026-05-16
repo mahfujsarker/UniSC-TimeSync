@@ -1,9 +1,10 @@
 /**
- * Unit Routes (Admin only for write ops)
+ * Course Routes
+ * Course routes. Storage remains backward-compatible with the existing schema.
  */
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/unitController');
+const controller = require('../controllers/courseController');
 const authenticateToken = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 

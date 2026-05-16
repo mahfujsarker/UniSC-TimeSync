@@ -65,7 +65,7 @@ export default function ViewTimetable() {
           <div className="form-group">
             <label className="form-label">Trimester</label>
             <select className="form-select" value={selectedTrimester} onChange={e => setSelectedTrimester(e.target.value)} disabled={!selectedDegree}>
-              <option value="">Select trimester...</option>
+              <option value="">Select teaching period...</option>
               {trimesters.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>

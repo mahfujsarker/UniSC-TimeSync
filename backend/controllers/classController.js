@@ -1,6 +1,6 @@
 /**
  * Class Controller
- * Manages class instances generated based on unit capacity.
+ * Manages class instances generated based on course capacity.
  */
 const pool = require('../config/db');
 const { ensureAcademicSchema } = require('../utils/academicSchema');
@@ -40,7 +40,7 @@ async function getAll(req, res) {
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
       JOIN trimesters t ON c.trimester_id = t.id
-      WHERE 1=1
+      WHERE u.status = 'published' AND d.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -81,7 +81,7 @@ async function getById(req, res) {
        JOIN unit_degrees ud ON u.id = ud.unit_id
        JOIN degrees d ON ud.degree_id = d.id
        JOIN trimesters t ON c.trimester_id = t.id
-       WHERE c.id = $1`,
+       WHERE c.id = $1 AND u.status = 'published' AND d.status = 'published'`,
       [id]
     );
     if (result.rows.length === 0) {
@@ -94,13 +94,14 @@ async function getById(req, res) {
   }
 }
 
-async function getByUnitAndTrimester(req, res) {
+async function getByCourseAndTrimester(req, res) {
   try {
     await ensureAcademicSchema();
-    const { unit_id, trimester_id } = req.query;
+    const course_id = req.query.course_id || req.query.unit_id;
+    const { trimester_id } = req.query;
     
-    if (!unit_id || !trimester_id) {
-      return res.status(400).json({ error: 'unit_id and trimester_id are required' });
+    if (!course_id || !trimester_id) {
+      return res.status(400).json({ error: 'course_id and trimester_id are required' });
     }
 
     const result = await pool.query(
@@ -109,19 +110,19 @@ async function getByUnitAndTrimester(req, res) {
               (SELECT COUNT(*) FROM timetable_entries te WHERE te.class_id = c.id AND te.is_recurring = true) as is_scheduled
        FROM classes c
        JOIN units u ON c.unit_id = u.id
-       WHERE c.unit_id = $1 AND c.trimester_id = $2
+       WHERE c.unit_id = $1 AND c.trimester_id = $2 AND u.status = 'published'
        ORDER BY c.group_name`,
-      [unit_id, trimester_id]
+      [course_id, trimester_id]
     );
 
     res.json({
-      unit_id,
+      course_id,
       trimester_id,
       classes: result.rows,
       has_classes: result.rows.length > 0
     });
   } catch (err) {
-    console.error('Error fetching classes by unit and trimester:', err);
+    console.error('Error fetching classes by course and trimester:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -145,6 +146,8 @@ async function getUnscheduled(req, res) {
         SELECT 1 FROM timetable_entries te 
         WHERE te.class_id = c.id AND te.is_recurring = true
       )
+        AND u.status = 'published'
+        AND d.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -167,24 +170,25 @@ async function getUnscheduled(req, res) {
   }
 }
 
-async function createForUnit(req, res) {
+async function createForCourse(req, res) {
   const client = await pool.connect();
   try {
     await ensureAcademicSchema();
-    const { unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students } = req.body;
+    const course_id = req.body.course_id || req.body.unit_id;
+    const { trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students } = req.body;
 
-    if (!unit_id || !trimester_id) {
-      return res.status(400).json({ error: 'unit_id and trimester_id are required' });
+    if (!course_id || !trimester_id) {
+      return res.status(400).json({ error: 'course_id and trimester_id are required' });
     }
 
-    const unitResult = await client.query('SELECT * FROM units WHERE id = $1', [unit_id]);
-    if (unitResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Unit not found' });
+    const courseResult = await client.query("SELECT * FROM units WHERE id = $1 AND status = 'published'", [course_id]);
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
     }
-    const unit = unitResult.rows[0];
+    const course = courseResult.rows[0];
 
-    const roomType = required_room_type || unit.classroom_type;
-    const classDuration = duration || unit.class_duration;
+    const roomType = required_room_type || course.classroom_type;
+    const classDuration = duration || course.class_duration;
     const capacity = max_capacity || (roomType === 'lab' ? 25 : 30);
     const name = group_name || 'Group A';
     const enrolled = enrolled_students || 0;
@@ -193,7 +197,7 @@ async function createForUnit(req, res) {
 
     const existingResult = await client.query(
       'SELECT * FROM classes WHERE unit_id = $1 AND trimester_id = $2 AND group_name = $3',
-      [unit_id, trimester_id, name]
+      [course_id, trimester_id, name]
     );
 
     let createdClass;
@@ -208,7 +212,7 @@ async function createForUnit(req, res) {
         `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [unit_id, trimester_id, name, roomType, classDuration, capacity, enrolled]
+        [course_id, trimester_id, name, roomType, classDuration, capacity, enrolled]
       );
       createdClass = result.rows[0];
     }
@@ -236,7 +240,7 @@ async function createBatchForTrimester(req, res) {
 
     await client.query('BEGIN');
 
-    let unitQuery = `
+    let courseQuery = `
       SELECT u.*,
              EXISTS(SELECT 1 FROM classes c WHERE c.unit_id = u.id AND c.trimester_id = $1) as has_existing_classes
       FROM units u
@@ -245,48 +249,59 @@ async function createBatchForTrimester(req, res) {
         AND uop.period_type = tp.type
         AND uop.period_number = tp.period_number
       WHERE tp.status = 'published'
+        AND u.status = 'published'
+        AND EXISTS (
+          SELECT 1
+          FROM unit_degrees ud2
+          JOIN degrees d2 ON d2.id = ud2.degree_id
+          WHERE ud2.unit_id = u.id AND d2.status = 'published'
+        )
     `;
     const params = [trimester_id];
 
     if (degree_id) {
-      unitQuery += ' AND EXISTS (SELECT 1 FROM unit_degrees ud WHERE ud.unit_id = u.id AND ud.degree_id = $2)';
+      courseQuery += ` AND EXISTS (
+        SELECT 1 FROM unit_degrees ud
+        JOIN degrees d ON d.id = ud.degree_id
+        WHERE ud.unit_id = u.id AND ud.degree_id = $2 AND d.status = 'published'
+      )`;
       params.push(degree_id);
     }
 
-    const unitsResult = await client.query(unitQuery, params);
+    const coursesResult = await client.query(courseQuery, params);
 
     const results = [];
     let totalGenerated = 0;
 
-    for (const unit of unitsResult.rows) {
-      if (unit.has_existing_classes) {
+    for (const course of coursesResult.rows) {
+      if (course.has_existing_classes) {
         results.push({
-          unit_id: unit.id,
-          unit_name: unit.name,
-          unit_code: unit.code,
+          unit_id: course.id,
+          unit_name: course.name,
+          unit_code: course.code,
           status: 'already_exists',
           classes_created: 0
         });
         continue;
       }
 
-      const numClasses = calculateNumberOfClasses(unit.total_students || 0, unit.classroom_type);
+      const numClasses = calculateNumberOfClasses(course.total_students || 0, course.classroom_type);
       const groupNames = generateGroupNames(numClasses);
-      const capacity = ROOM_CAPACITIES[unit.classroom_type] || 30;
+      const capacity = ROOM_CAPACITIES[course.classroom_type] || 30;
 
       for (const groupName of groupNames) {
         await client.query(
           `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [unit.id, trimester_id, groupName, unit.classroom_type, unit.class_duration, capacity]
+          [course.id, trimester_id, groupName, course.classroom_type, course.class_duration, capacity]
         );
         totalGenerated++;
       }
 
       results.push({
-        unit_id: unit.id,
-        unit_name: unit.name,
-        unit_code: unit.code,
+        unit_id: course.id,
+        unit_name: course.name,
+        unit_code: course.code,
         status: 'generated',
         classes_created: numClasses
       });
@@ -294,7 +309,7 @@ async function createBatchForTrimester(req, res) {
 
     await client.query('COMMIT');
     res.status(201).json({
-      message: `Generated ${totalGenerated} classes across ${results.filter(r => r.status === 'generated').length} units`,
+      message: `Generated ${totalGenerated} classes across ${results.filter(r => r.status === 'generated').length} courses`,
       total_generated: totalGenerated,
       results
     });
@@ -349,23 +364,24 @@ async function remove(req, res) {
   }
 }
 
-async function removeByUnit(req, res) {
+async function removeByCourse(req, res) {
   try {
     await ensureAcademicSchema();
-    const { unit_id, trimester_id } = req.query;
-    if (!unit_id || !trimester_id) {
-      return res.status(400).json({ error: 'unit_id and trimester_id are required' });
+    const course_id = req.query.course_id || req.query.unit_id;
+    const { trimester_id } = req.query;
+    if (!course_id || !trimester_id) {
+      return res.status(400).json({ error: 'course_id and trimester_id are required' });
     }
     const result = await pool.query(
       'DELETE FROM classes WHERE unit_id = $1 AND trimester_id = $2 RETURNING *',
-      [unit_id, trimester_id]
+      [course_id, trimester_id]
     );
     res.json({ 
       message: `${result.rowCount} class(es) deleted`,
       deleted_count: result.rowCount 
     });
   } catch (err) {
-    console.error('Error deleting classes by unit:', err);
+    console.error('Error deleting classes by course:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -373,13 +389,17 @@ async function removeByUnit(req, res) {
 module.exports = {
   getAll,
   getById,
-  getByUnitAndTrimester,
+  getByCourseAndTrimester,
+  getByUnitAndTrimester: getByCourseAndTrimester,
   getUnscheduled,
-  createForUnit,
+  createForCourse,
+  createForUnit: createForCourse,
   createBatchForTrimester,
   update,
   remove,
-  removeByUnit,
+  removeByCourse,
+  removeByUnit: removeByCourse,
   calculateNumberOfClasses,
   ROOM_CAPACITIES
 };
+

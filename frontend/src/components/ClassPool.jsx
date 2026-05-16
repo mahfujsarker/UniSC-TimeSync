@@ -15,7 +15,7 @@ export default function ClassPool({ classes, onClassClick, readOnly = false }) {
       <div className="class-pool-empty bg-surface-50 rounded-lg p-6 text-center">
         <div className="text-3xl mb-2">📋</div>
         <p className="text-surface-500 text-sm">No unscheduled classes</p>
-        <p className="text-surface-400 text-xs mt-1">Create units to generate classes</p>
+        <p className="text-surface-400 text-xs mt-1">Create courses to generate classes</p>
       </div>
     );
   }
@@ -35,12 +35,12 @@ export default function ClassPool({ classes, onClassClick, readOnly = false }) {
       </div>
       
       <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-        {Object.entries(groupedClasses).map(([unitCode, unitClasses]) => (
-          <div key={unitCode} className="unit-group">
+        {Object.entries(groupedClasses).map(([courseCode, courseClasses]) => (
+          <div key={courseCode} className="course-group">
             <div className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-1.5 px-1">
-              {unitCode}
+              {courseCode}
             </div>
-            {unitClasses.map((cls, index) => {
+            {courseClasses.map((cls, index) => {
               const colors = ROOM_TYPE_COLORS[cls.required_room_type] || ROOM_TYPE_COLORS.normal;
               return (
                 <Draggable

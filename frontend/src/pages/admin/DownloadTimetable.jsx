@@ -74,7 +74,7 @@ export default function DownloadTimetable() {
         <div>
           <p className="page-kicker">Exports</p>
           <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Download Timetable</h2>
-          <p className="page-subtitle">View and download trimester/session routines.</p>
+          <p className="page-subtitle">View and download teaching period routines.</p>
         </div>
       </div>
 
@@ -89,7 +89,7 @@ export default function DownloadTimetable() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Trimester / Session</th>
+                <th>Teaching Period</th>
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Classes</th>

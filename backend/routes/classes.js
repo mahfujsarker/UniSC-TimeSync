@@ -10,12 +10,14 @@ const roleCheck = require('../middleware/roleCheck');
 
 router.get('/', authenticateToken, classController.getAll);
 router.get('/unscheduled', authenticateToken, classController.getUnscheduled);
-router.get('/by-unit', authenticateToken, classController.getByUnitAndTrimester);
+router.get('/by-course', authenticateToken, classController.getByCourseAndTrimester);
+router.get('/by-unit', authenticateToken, classController.getByCourseAndTrimester);
 router.get('/:id', authenticateToken, classController.getById);
-router.post('/', authenticateToken, roleCheck('admin'), classController.createForUnit);
+router.post('/', authenticateToken, roleCheck('admin'), classController.createForCourse);
 router.post('/batch', authenticateToken, roleCheck('admin'), classController.createBatchForTrimester);
 router.put('/:id', authenticateToken, roleCheck('admin'), classController.update);
+router.delete('/by-course', authenticateToken, roleCheck('admin'), classController.removeByCourse);
+router.delete('/by-unit', authenticateToken, roleCheck('admin'), classController.removeByCourse);
 router.delete('/:id', authenticateToken, roleCheck('admin'), classController.remove);
-router.delete('/by-unit', authenticateToken, roleCheck('admin'), classController.removeByUnit);
 
 module.exports = router;

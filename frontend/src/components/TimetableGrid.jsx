@@ -63,20 +63,20 @@ export default function TimetableGrid({
   };
 
   return (
-    <div className="timetable-grid-container overflow-x-auto">
+    <div className="timetable-grid-container overflow-x-auto liquid-scroll">
       <div className="min-w-[900px]">
         <div className="flex sticky top-0 z-10">
-          <div className="w-20 flex-shrink-0 bg-surface-100 border-b border-r border-surface-200 h-14" />
+          <div className="w-20 flex-shrink-0 timetable-board-header border-b border-r border-white/70 h-14" />
 
           {classrooms.map(room => (
             <div
               key={room.id}
-              className={`flex-1 min-w-[300px] border-b border-surface-200 h-14 flex ${ROOM_TYPE_COLORS[room.type]?.header || ROOM_TYPE_COLORS.normal.header}`}
+              className={`flex-1 min-w-[300px] border-b border-white/70 h-14 flex ${ROOM_TYPE_COLORS[room.type]?.header || ROOM_TYPE_COLORS.normal.header}`}
             >
               {DAYS.map(day => (
                 <div
                   key={`${room.id}-${day}`}
-                  className="flex-1 flex items-center justify-center text-xs font-semibold border-r border-surface-200 last:border-r-0"
+                  className="flex-1 flex items-center justify-center text-xs font-bold border-r border-white/70 last:border-r-0 bg-white/55"
                   style={{ borderLeft: `3px solid ${DAY_COLORS[day]}` }}
                 >
                   {room.room_number} - {day}
@@ -87,12 +87,12 @@ export default function TimetableGrid({
         </div>
 
         <div className="flex">
-          <div className="w-20 flex-shrink-0 bg-surface-50">
-            <div className="h-8 border-b border-r border-surface-200" />
+          <div className="w-20 flex-shrink-0">
+            <div className="h-8 border-b border-r border-white/70 bg-white/65" />
             {TIME_SLOTS.map(slot => (
               <div
                 key={slot}
-                className="h-12 flex items-center justify-end pr-2 text-[10px] text-surface-500 font-medium border-b border-r border-surface-200"
+                className="h-12 flex items-center justify-end pr-2 text-[10px] text-surface-600 font-semibold border-b border-r border-white/70 bg-white/70 backdrop-blur"
               >
                 {slot}
               </div>
@@ -105,7 +105,7 @@ export default function TimetableGrid({
             return (
               <div
                 key={room.id}
-                className="flex-1 min-w-[300px] border-r border-surface-200 last:border-r-0"
+                className="flex-1 min-w-[300px] border-r border-white/70 last:border-r-0"
               >
                 <div className="flex">
                   {DAYS.map(day => (
@@ -125,7 +125,7 @@ export default function TimetableGrid({
                               <div
                                 ref={provided.innerRef}
                                 {...provided.droppableProps}
-                                className={`h-12 border-b border-r border-surface-200 last:border-r-0 relative transition-colors ${
+                                className={`timetable-drop-cell last:border-r-0 ${
                                   snapshot.isDraggingOver ? 'bg-brand-yellow/20' :
                                   isHovered ? 'bg-surface-50' : ''
                                 } ${slotIndex % 2 === 0 ? 'bg-white' : 'bg-surface-50/50'}`}
@@ -151,7 +151,7 @@ export default function TimetableGrid({
                                           ref={provided.innerRef}
                                           {...provided.draggableProps}
                                           {...provided.dragHandleProps}
-                                          className={`absolute left-0.5 right-0.5 rounded p-0.5 cursor-grab overflow-hidden text-[9px] ${colors.card} ${snapshot.isDragging ? 'shadow-lg z-50 scale-[1.02]' : 'hover:shadow-md'}`}
+                                          className={`absolute left-0.5 right-0.5 timetable-entry-card text-[9px] ${colors.card} ${snapshot.isDragging ? 'is-dragging z-50 scale-[1.02]' : ''}`}
                                           style={{
                                             height: `${height}px`,
                                             top: '2px',

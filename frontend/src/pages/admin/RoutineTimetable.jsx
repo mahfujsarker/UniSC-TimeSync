@@ -59,7 +59,7 @@ export default function RoutineTimetable() {
           <p className="page-subtitle">
             {trimester
               ? `${trimester.name} | ${formatDate(trimester.start_date)} - ${formatDate(trimester.end_date)}`
-              : 'Selected trimester/session'}
+              : 'Selected teaching period'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -75,7 +75,7 @@ export default function RoutineTimetable() {
 
       <div className="glass-card p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-surface-700">
-          <div><span className="font-semibold">Trimester/session:</span> {trimester?.name || '-'}</div>
+          <div><span className="font-semibold">Teaching period:</span> {trimester?.name || '-'}</div>
           <div><span className="font-semibold">Generated:</span> {formatGeneratedDate()}</div>
           <div><span className="font-semibold">Classes:</span> {entries.length}</div>
         </div>
@@ -87,7 +87,7 @@ export default function RoutineTimetable() {
         <div className="glass-card border-danger/30 p-12 text-center text-danger">{error}</div>
       ) : entries.length === 0 ? (
         <div className="empty-state">
-          No timetable entries for this trimester/session
+          No timetable entries for this teaching period
         </div>
       ) : (
         <RoutineTable entries={entries} />

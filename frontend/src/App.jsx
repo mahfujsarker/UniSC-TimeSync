@@ -12,7 +12,6 @@ import Register from './pages/Register';
 // Admin pages
 import AdminDashboard, { AdminHome } from './pages/admin/AdminDashboard';
 import DegreeManager from './pages/admin/DegreeManager';
-import UnitManager from './pages/admin/UnitManager';
 import TrimesterManager from './pages/admin/TrimesterManager';
 import ClassroomManager from './pages/admin/ClassroomManager';
 import TutorManager from './pages/admin/TutorManager';
@@ -50,7 +49,8 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>}>
         <Route index element={<AdminHome />} />
         <Route path="degrees" element={<DegreeManager />} />
-        <Route path="units" element={<UnitManager />} />
+        <Route path="courses" element={<Navigate to="/admin/degrees" replace />} />
+        <Route path="units" element={<Navigate to="/admin/degrees" replace />} />
         <Route path="trimesters" element={<TrimesterManager />} />
         <Route path="classrooms" element={<ClassroomManager />} />
         <Route path="tutors" element={<TutorManager />} />

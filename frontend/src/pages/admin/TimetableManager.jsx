@@ -1,7 +1,7 @@
 /**
  * Timetable Manager Page — Room-based Weekly University Scheduler
  * Kanban board layout with rooms as rows, days as columns, time slots as sub-rows.
- * Enrolled student numbers entered per unit before generating classes.
+ * Enrolled student numbers entered per course before generating classes.
  */
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -44,22 +44,22 @@ function minutesToTime(minutes) {
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
 }
 
-function ClassLocationMiniMap({ classrooms, unitEntries, onFocusEntry }) {
+function ClassLocationMiniMap({ classrooms, courseEntries, onFocusEntry }) {
   const gridColumnCount = Math.max(classrooms.length * DAYS.length, 1);
   const gridTemplateColumns = `2rem repeat(${gridColumnCount}, 0.375rem)`;
   const minWidth = `${Math.max(150, 32 + gridColumnCount * 8)}px`;
 
   const entryColors = useMemo(() => {
-    return unitEntries.reduce((colors, entry, index) => {
+    return courseEntries.reduce((colors, entry, index) => {
       colors.set(String(entry.id), MINI_MAP_COLORS[index % MINI_MAP_COLORS.length]);
       return colors;
     }, new Map());
-  }, [unitEntries]);
+  }, [courseEntries]);
 
   const entriesByCoveredCell = useMemo(() => {
     const cells = new Map();
 
-    unitEntries.forEach(entry => {
+    courseEntries.forEach(entry => {
       const startMinutes = timeToMinutes(entry.start_time);
       const endMinutes = timeToMinutes(entry.end_time);
       if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) return;
@@ -85,7 +85,7 @@ function ClassLocationMiniMap({ classrooms, unitEntries, onFocusEntry }) {
     });
 
     return cells;
-  }, [entryColors, unitEntries]);
+  }, [entryColors, courseEntries]);
 
   const getTooltip = (room, day, slot, entry) => {
     if (!entry) return `${room.room_number} | ${day} | ${slot}`;
@@ -111,7 +111,7 @@ function ClassLocationMiniMap({ classrooms, unitEntries, onFocusEntry }) {
     <div className="mt-2 rounded-xl border border-white/70 bg-white/65 p-2 shadow-sm backdrop-blur">
       <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-surface-500">
         <span>{classrooms.length} rooms x {DAYS.length} days x {TIME_SLOTS.length} slots</span>
-        <span className="font-semibold text-brand-blue">{unitEntries.length} class{unitEntries.length === 1 ? '' : 'es'}</span>
+        <span className="font-semibold text-brand-blue">{courseEntries.length} class{courseEntries.length === 1 ? '' : 'es'}</span>
       </div>
 
       <div className="overflow-x-auto pb-1">
@@ -183,10 +183,10 @@ export default function TimetableManager() {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
   const [selectedTrimester, setSelectedTrimester] = useState('');
 
-  const [units, setUnits] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [scheduledEntries, setScheduledEntries] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [generatingUnit, setGeneratingUnit] = useState(null);
+  const [generatingCourse, setGeneratingCourse] = useState(null);
   const [enrolledStudents, setEnrolledStudents] = useState({});
   const [expandedMiniMaps, setExpandedMiniMaps] = useState({});
   const [focusedEntryId, setFocusedEntryId] = useState(null);
@@ -251,7 +251,7 @@ export default function TimetableManager() {
     }
   }, [selectedAcademicYear, selectedTrimester, teachingPeriodsForYear]);
 
-  const loadUnits = useCallback(async () => {
+  const loadCourses = useCallback(async () => {
     if (!selectedTrimester) return;
     setLoading(true);
     try {
@@ -259,19 +259,19 @@ export default function TimetableManager() {
       if (selectedDegree) params.append('degree_id', selectedDegree);
       params.append('trimester_id', selectedTrimester);
       
-      const res = await api.get(`/units/by-degree?${params.toString()}`);
-      setUnits(res.data);
+      const res = await api.get(`/courses/by-degree?${params.toString()}`);
+      setCourses(res.data);
       setEnrolledStudents(prev => {
         const next = { ...prev };
-        res.data.forEach(unit => {
-          if (next[unit.id] === undefined && unit.total_students !== undefined) {
-            next[unit.id] = Number(unit.total_students) || 0;
+        res.data.forEach(course => {
+          if (next[course.id] === undefined && course.total_students !== undefined) {
+            next[course.id] = Number(course.total_students) || 0;
           }
         });
         return next;
       });
     } catch {
-      setToast({ message: 'Failed to load units', type: 'error' });
+      setToast({ message: 'Failed to load courses', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -304,7 +304,7 @@ export default function TimetableManager() {
     setFocusedEntryId(null);
   }, [selectedTrimester]);
 
-  useEffect(() => { loadUnits(); }, [loadUnits]);
+  useEffect(() => { loadCourses(); }, [loadCourses]);
   useEffect(() => { loadScheduledEntries(); }, [loadScheduledEntries]);
 
   useEffect(() => {
@@ -315,39 +315,39 @@ export default function TimetableManager() {
     };
   }, []);
 
-  const handleEnrolledStudentsChange = async (unitId, value) => {
+  const handleEnrolledStudentsChange = async (courseId, value) => {
     const numValue = parseInt(value) || 0;
-    setEnrolledStudents(prev => ({ ...prev, [unitId]: numValue }));
+    setEnrolledStudents(prev => ({ ...prev, [courseId]: numValue }));
 
     try {
-      await api.put(`/units/${unitId}/enrolled-students`, { total_students: numValue });
+      await api.put(`/courses/${courseId}/enrolled-students`, { total_students: numValue });
     } catch {
       setToast({ message: 'Failed to save enrolled students', type: 'error' });
     }
   };
 
-  const getEnrolledStudents = (unitId) => {
-    return enrolledStudents[unitId] || 0;
+  const getEnrolledStudents = (courseId) => {
+    return enrolledStudents[courseId] || 0;
   };
 
-  const handleGenerateClass = async (unitId) => {
+  const handleGenerateClass = async (courseId) => {
     if (!selectedTrimester) {
       setToast({ message: 'Please select a teaching period first', type: 'error' });
       return;
     }
 
-    const enrolled = getEnrolledStudents(unitId);
+    const enrolled = getEnrolledStudents(courseId);
     if (!enrolled || enrolled === 0) {
       setToast({ message: 'Please enter enrolled student number first', type: 'error' });
       return;
     }
 
-    const unit = units.find(u => u.id === unitId);
-    if (!unit) return;
+    const course = courses.find(item => item.id === courseId);
+    if (!course) return;
 
-    setGeneratingUnit(unitId);
+    setGeneratingCourse(courseId);
     try {
-      const numClasses = Math.ceil(enrolled / (unit?.classroom_type === 'lab' ? 25 : 30));
+      const numClasses = Math.ceil(enrolled / (course?.classroom_type === 'lab' ? 25 : 30));
 
       const createdClasses = [];
       for (let i = 0; i < numClasses; i++) {
@@ -355,18 +355,18 @@ export default function TimetableManager() {
         const groupName = `Group ${letter}`;
 
         const classRes = await api.post('/classes', {
-          unit_id: unitId,
+          unit_id: courseId,
           trimester_id: selectedTrimester,
           group_name: groupName,
-          required_room_type: unit?.classroom_type || 'normal',
-          duration: unit?.class_duration || 1,
-          max_capacity: unit?.classroom_type === 'lab' ? 25 : 30
+          required_room_type: course?.classroom_type || 'normal',
+          duration: course?.class_duration || 1,
+          max_capacity: course?.classroom_type === 'lab' ? 25 : 30
         });
 
         const newClass = classRes.data;
         createdClasses.push(newClass);
 
-        const assigned = await autoScheduleClass(newClass, unit);
+        const assigned = await autoScheduleClass(newClass, course);
         if (assigned) {
           await loadScheduledEntries();
         }
@@ -376,18 +376,18 @@ export default function TimetableManager() {
         message: `${createdClasses.length} class(es) generated and scheduled`,
         type: 'success'
       });
-      loadUnits();
+      loadCourses();
     } catch (err) {
       setToast({ message: err.response?.data?.error || 'Failed to generate classes', type: 'error' });
     } finally {
-      setGeneratingUnit(null);
+      setGeneratingCourse(null);
     }
   };
 
-  const autoScheduleClass = async (cls, unit) => {
-    const requiredCapacity = cls.max_capacity || (unit?.classroom_type === 'lab' ? 25 : 30);
+  const autoScheduleClass = async (cls, course) => {
+    const requiredCapacity = cls.max_capacity || (course?.classroom_type === 'lab' ? 25 : 30);
     const suitableRooms = classrooms.filter(r =>
-      r.type === (unit?.classroom_type || 'normal') &&
+      r.type === (course?.classroom_type || 'normal') &&
       r.max_capacity >= requiredCapacity &&
       r.is_available
     );
@@ -407,7 +407,7 @@ export default function TimetableManager() {
         for (const day of DAYS) {
           for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
             const startTime = TIME_SLOTS[i];
-            const duration = cls.duration || unit?.class_duration || 1;
+            const duration = cls.duration || course?.class_duration || 1;
             const endHour = parseInt(startTime.split(':')[0]) + duration;
             const endTime = `${endHour.toString().padStart(2, '0')}:00`;
 
@@ -456,15 +456,15 @@ export default function TimetableManager() {
       return;
     }
 
-    setGeneratingUnit('all');
+    setGeneratingCourse('all');
     try {
       let generated = 0;
 
-      for (const unit of units) {
-        const enrolled = getEnrolledStudents(unit.id);
+      for (const course of courses) {
+        const enrolled = getEnrolledStudents(course.id);
         if (!enrolled || enrolled === 0) continue;
 
-        const numClasses = Math.ceil(enrolled / (unit.classroom_type === 'lab' ? 25 : 30));
+        const numClasses = Math.ceil(enrolled / (course.classroom_type === 'lab' ? 25 : 30));
 
         for (let i = 0; i < numClasses; i++) {
           const letter = String.fromCharCode(65 + i);
@@ -472,15 +472,15 @@ export default function TimetableManager() {
 
           try {
             const classRes = await api.post('/classes', {
-              unit_id: unit.id,
+              unit_id: course.id,
               trimester_id: selectedTrimester,
               group_name: groupName,
-              required_room_type: unit.classroom_type,
-              duration: unit.class_duration || 1,
-              max_capacity: unit.classroom_type === 'lab' ? 25 : 30
+              required_room_type: course.classroom_type,
+              duration: course.class_duration || 1,
+              max_capacity: course.classroom_type === 'lab' ? 25 : 30
             });
 
-            await autoScheduleClass(classRes.data, unit);
+            await autoScheduleClass(classRes.data, course);
             generated++;
           } catch {
             continue;
@@ -489,12 +489,12 @@ export default function TimetableManager() {
       }
 
       setToast({ message: `${generated} class(es) generated and scheduled`, type: 'success' });
-      loadUnits();
+      loadCourses();
       loadScheduledEntries();
     } catch (err) {
       setToast({ message: err.response?.data?.error || 'Failed to generate classes', type: 'error' });
     } finally {
-      setGeneratingUnit(null);
+      setGeneratingCourse(null);
     }
   };
 
@@ -585,10 +585,10 @@ export default function TimetableManager() {
     setShowScheduleModal(true);
   };
 
-  const toggleMiniMap = (unitId) => {
+  const toggleMiniMap = (courseId) => {
     setExpandedMiniMaps(prev => ({
       ...prev,
-      [unitId]: !prev[unitId]
+      [courseId]: !prev[courseId]
     }));
   };
 
@@ -639,7 +639,7 @@ export default function TimetableManager() {
 
       setShowScheduleModal(false);
       loadScheduledEntries();
-      loadUnits();
+      loadCourses();
     } catch (err) {
       const conflicts = err.response?.data?.conflicts;
       if (conflicts?.length > 0) {
@@ -686,14 +686,14 @@ export default function TimetableManager() {
     return cells;
   }, [scheduledEntries]);
 
-  const scheduledCountsByUnit = useMemo(() => {
+  const scheduledCountsByCourse = useMemo(() => {
     return scheduledEntries.reduce((counts, entry) => {
       counts.set(entry.unit_id, (counts.get(entry.unit_id) || 0) + 1);
       return counts;
     }, new Map());
   }, [scheduledEntries]);
 
-  const scheduledEntriesByUnit = useMemo(() => {
+  const scheduledEntriesByCourse = useMemo(() => {
     return scheduledEntries.reduce((entries, entry) => {
       const key = String(entry.unit_id);
       const existing = entries.get(key) || [];
@@ -703,8 +703,8 @@ export default function TimetableManager() {
     }, new Map());
   }, [scheduledEntries]);
 
-  const getScheduledCountForUnit = (unitId) => {
-    return scheduledCountsByUnit.get(unitId) || 0;
+  const getScheduledCountForCourse = (courseId) => {
+    return scheduledCountsByCourse.get(courseId) || 0;
   };
 
   const roomTypeLabel = (type) => type === 'lab' ? 'Lab' : 'Normal';
@@ -733,7 +733,7 @@ export default function TimetableManager() {
             </button>
           )}
           <button
-            onClick={() => { loadUnits(); loadScheduledEntries(); }}
+            onClick={() => { loadCourses(); loadScheduledEntries(); }}
             className="btn btn-sm btn-secondary"
             disabled={loading}
           >
@@ -791,44 +791,44 @@ export default function TimetableManager() {
             <div className="w-full xl:w-80 flex-shrink-0">
               <div className="glass-card p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-sm text-surface-900">Units</h3>
+                  <h3 className="font-semibold text-sm text-surface-900">Courses</h3>
                   <button
                     onClick={handleGenerateAll}
                     className="btn btn-sm btn-primary"
-                    disabled={!selectedTrimester || generatingUnit === 'all' || loading || units.length === 0}
+                    disabled={!selectedTrimester || generatingCourse === 'all' || loading || courses.length === 0}
                   >
-                    {generatingUnit === 'all' ? 'Generating...' : 'Generate All'}
+                    {generatingCourse === 'all' ? 'Generating...' : 'Generate All'}
                   </button>
                 </div>
 
                 {!selectedTrimester ? (
                   <div className="text-center py-6 text-surface-500 text-sm">Select a teaching period for generation</div>
                 ) : loading ? (
-                  <div className="text-center py-6 text-surface-400 text-sm">Loading units...</div>
-                ) : units.length === 0 ? (
-                  <div className="text-center py-6 text-surface-500 text-sm">No units for selected filters</div>
+                  <div className="text-center py-6 text-surface-400 text-sm">Loading courses...</div>
+                ) : courses.length === 0 ? (
+                  <div className="text-center py-6 text-surface-500 text-sm">No courses for selected filters</div>
                 ) : (
                   <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
-                    {units.map(unit => {
-                      const scheduledCount = getScheduledCountForUnit(unit.id);
-                      const enrolled = getEnrolledStudents(unit.id);
-                      const numClasses = Math.ceil(enrolled / (unit.classroom_type === 'lab' ? 25 : 30));
+                    {courses.map(course => {
+                      const scheduledCount = getScheduledCountForCourse(course.id);
+                      const enrolled = getEnrolledStudents(course.id);
+                      const numClasses = Math.ceil(enrolled / (course.classroom_type === 'lab' ? 25 : 30));
                       const hasClasses = scheduledCount > 0;
-                      const unitScheduledEntries = scheduledEntriesByUnit.get(String(unit.id)) || [];
-                      const isMiniMapExpanded = !!expandedMiniMaps[unit.id];
+                      const courseScheduledEntries = scheduledEntriesByCourse.get(String(course.id)) || [];
+                      const isMiniMapExpanded = !!expandedMiniMaps[course.id];
 
                       return (
                         <div
-                          key={unit.id}
+                          key={course.id}
                           className={`rounded-xl border p-3 transition-all hover:border-brand-blue/40 hover:bg-white/80 ${hasClasses ? 'bg-white/60 border-white/80' : 'bg-white/45 border-white/60'}`}
                         >
                           <div className="flex items-start justify-between mb-1">
                             <div>
-                              <span className="font-bold text-xs text-surface-900">{unit.code}</span>
-                              <span className="text-xs text-surface-500 ml-2">{unit.name}</span>
+                              <span className="font-bold text-xs text-surface-900">{course.code}</span>
+                              <span className="text-xs text-surface-500 ml-2">{course.name}</span>
                             </div>
-                            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${unit.classroom_type === 'lab' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {roomTypeLabel(unit.classroom_type)}
+                            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${course.classroom_type === 'lab' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                              {roomTypeLabel(course.classroom_type)}
                             </span>
                           </div>
 
@@ -840,7 +840,7 @@ export default function TimetableManager() {
                               className="w-16 text-[10px] border border-white/70 bg-white/70 rounded-md px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                               placeholder="0"
                               value={enrolled || ''}
-                              onChange={e => handleEnrolledStudentsChange(unit.id, e.target.value)}
+                              onChange={e => handleEnrolledStudentsChange(course.id, e.target.value)}
                             />
                             {enrolled > 0 && (
                               <span className="text-[10px] text-surface-500">
@@ -860,7 +860,7 @@ export default function TimetableManager() {
 
                               <button
                                 type="button"
-                                onClick={() => toggleMiniMap(unit.id)}
+                                onClick={() => toggleMiniMap(course.id)}
                                 className="mt-2 flex w-full items-center justify-between rounded-lg border border-white/70 bg-white/65 px-2 py-1.5 text-left text-[11px] font-semibold text-surface-700 transition-colors hover:border-brand-blue hover:text-brand-blue"
                                 aria-expanded={isMiniMapExpanded}
                               >
@@ -878,18 +878,18 @@ export default function TimetableManager() {
                               {isMiniMapExpanded && (
                                 <ClassLocationMiniMap
                                   classrooms={classrooms}
-                                  unitEntries={unitScheduledEntries}
+                                  courseEntries={courseScheduledEntries}
                                   onFocusEntry={focusEntryOnBoard}
                                 />
                               )}
                             </>
                           ) : (
                             <button
-                              onClick={() => handleGenerateClass(unit.id)}
+                              onClick={() => handleGenerateClass(course.id)}
                               className="btn btn-primary btn-sm w-full"
-                              disabled={!selectedTrimester || generatingUnit === unit.id || enrolled === 0}
+                              disabled={!selectedTrimester || generatingCourse === course.id || enrolled === 0}
                             >
-                              {generatingUnit === unit.id ? 'Generating...' : 'Generate Class'}
+                              {generatingCourse === course.id ? 'Generating...' : 'Generate Course Class'}
                             </button>
                           )}
                         </div>
@@ -900,28 +900,31 @@ export default function TimetableManager() {
               </div>
             </div>
 
-            <div className="flex-1 min-w-0 overflow-x-auto">
+            <div className="flex-1 min-w-0 overflow-x-auto liquid-scroll">
               <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="glass-card timetable-dnd-board overflow-auto max-h-[calc(100vh-260px)]">
+                <div className="glass-card timetable-dnd-board liquid-scroll max-h-[calc(100vh-260px)]">
                   {classrooms.length === 0 ? (
                     <div className="p-12 text-center text-surface-500">No available classrooms</div>
                   ) : (
                     <div style={{ minWidth: boardMinWidth }}>
                       <div
-                        className="grid sticky top-0 z-20 bg-white/90 backdrop-blur-xl"
+                        className="grid sticky top-0 z-20 timetable-board-header"
                         style={{ gridTemplateColumns: boardGridTemplateColumns }}
                       >
-                        <div className="row-span-2 h-24 flex items-center justify-center bg-white/80 border-b border-r border-white/70 font-semibold text-surface-800">
+                        <div className="row-span-2 h-24 flex items-center justify-center border-b border-r border-white/70 font-black text-surface-800">
                           Time
                         </div>
 
                         {classrooms.map(room => (
                           <div
                             key={room.id}
-                            className={`h-12 flex items-center justify-center border-b border-r border-white/70 font-bold text-surface-900 ${room.type === 'lab' ? 'bg-amber-50/90' : 'bg-blue-50/90'}`}
+                            className={`h-12 flex items-center justify-center border-b border-r border-white/70 font-black text-surface-900 ${room.type === 'lab' ? 'bg-amber-50/80' : 'bg-blue-50/80'}`}
                             style={{ gridColumn: `span ${DAYS.length} / span ${DAYS.length}` }}
                           >
-                            {room.room_number}
+                            <span>{room.room_number}</span>
+                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${room.type === 'lab' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                              {roomTypeLabel(room.type)}
+                            </span>
                           </div>
                         ))}
 
@@ -929,7 +932,7 @@ export default function TimetableManager() {
                           DAYS.map(day => (
                             <div
                               key={`${room.id}-${day}-header`}
-                              className="h-12 flex items-center justify-center border-b border-r border-white/70 bg-white/70 text-xs font-semibold text-surface-700"
+                              className="h-12 flex items-center justify-center border-b border-r border-white/70 bg-white/60 text-xs font-bold text-surface-700"
                               style={{ borderLeft: `3px solid ${DAY_COLORS[day]}` }}
                             >
                               {day.substring(0, 3)}
@@ -944,7 +947,7 @@ export default function TimetableManager() {
                       >
                         {TIME_SLOTS.map((slot, slotIndex) => (
                           <Fragment key={slot}>
-                            <div className="time-cell-sticky h-12 flex items-start justify-end pr-3 pt-1 text-xs text-surface-500 font-medium border-b border-r border-white/70 bg-white/85 backdrop-blur-xl">
+                            <div className="timetable-time-cell">
                               <span>{slot}</span>
                               {slotIndex === TIME_SLOTS.length - 1 && (
                                 <span className="absolute -bottom-2 right-3 bg-white/85 pl-1">22:00</span>
@@ -966,7 +969,7 @@ export default function TimetableManager() {
                                       <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`h-12 border-b border-r border-white/70 relative transition-colors duration-75 ${slotIndex % 2 === 0 ? 'bg-white/50' : 'bg-white/30'} ${snapshot.isDraggingOver ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset' : ''}`}
+                                        className={`timetable-drop-cell ${slotIndex % 2 === 0 ? 'bg-white/42' : 'bg-white/28'} ${snapshot.isDraggingOver ? 'is-over' : ''}`}
                                       >
                                         {cellEntries.map((entry, entryIndex) => {
                                           const { height } = calculateCardStyle(entry);
@@ -985,7 +988,7 @@ export default function TimetableManager() {
                                                     {...provided.draggableProps}
                                                     {...provided.dragHandleProps}
                                                     id={`timetable-entry-${entry.id}`}
-                                                    className={`${snapshot.isDragging ? 'z-50' : 'absolute left-1 right-1 z-10'} rounded-lg p-1 cursor-grab overflow-hidden text-[10px] border ${hasTutorAvailabilityConflict ? 'bg-amber-50 border-amber-400 opacity-60 ring-2 ring-amber-400/40' : `${colors.bg} ${colors.border}`} shadow-sm backdrop-blur ${snapshot.isDragging ? 'shadow-xl cursor-grabbing ring-2 ring-brand-blue/30' : 'hover:shadow-md'} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
+                                                    className={`${snapshot.isDragging ? 'z-50 is-dragging' : 'absolute left-1 right-1 z-10'} timetable-entry-card ${hasTutorAvailabilityConflict ? 'has-warning border-amber-400 opacity-80 ring-2 ring-amber-400/35' : `${colors.border}`} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
                                                     title={conflictTitle}
                                                     style={{
                                                       height: `${height}px`,
@@ -1158,3 +1161,4 @@ export default function TimetableManager() {
     </div>
   );
 }
+

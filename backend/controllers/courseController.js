@@ -1,9 +1,19 @@
 /**
- * Unit Controller
- * CRUD operations for units/courses.
+ * Course Controller
+ * CRUD operations for courses.
  */
 const pool = require('../config/db');
 const { ensureAcademicSchema } = require('../utils/academicSchema');
+
+const STATUS_VALUES = new Set(['draft', 'reviewed', 'published', 'archived']);
+
+function includeInactive(req) {
+  return req.user?.role === 'admin' && String(req.query.include_inactive || '').toLowerCase() === 'true';
+}
+
+function normalizeStatus(status, fallback = 'published') {
+  return STATUS_VALUES.has(status) ? status : fallback;
+}
 
 function normalizeOfferingPatterns(patterns = []) {
   return [...new Map(patterns
@@ -11,10 +21,14 @@ function normalizeOfferingPatterns(patterns = []) {
     .map(pattern => {
       const periodType = String(pattern.period_type).toUpperCase();
       const periodNumber = Number(pattern.period_number);
-      const code = pattern.code || (periodType === 'TRIMESTER' ? `T${periodNumber}` : `S${periodNumber}`);
+      const code = pattern.code || (periodType === 'TRIMESTER' ? `T${periodNumber}` : periodType === 'SEMESTER' ? `SEM${periodNumber}` : `S${periodNumber}`);
       return [`${periodType}-${periodNumber}`, { period_type: periodType, period_number: periodNumber, code }];
     })).values()]
-    .filter(pattern => ['TRIMESTER', 'SESSION'].includes(pattern.period_type) && [1, 2, 3].includes(pattern.period_number));
+    .filter(pattern =>
+      (pattern.period_type === 'TRIMESTER' && pattern.period_number >= 1 && pattern.period_number <= 3)
+      || (pattern.period_type === 'SEMESTER' && pattern.period_number >= 1 && pattern.period_number <= 2)
+      || (pattern.period_type === 'SESSION' && pattern.period_number >= 1 && pattern.period_number <= 8)
+    );
 }
 
 async function replaceOfferingPatterns(client, unitId, patterns) {
@@ -66,6 +80,11 @@ async function getAll(req, res) {
       )`);
     }
 
+    if (!includeInactive(req)) {
+      conditions.push("u.status = 'published'");
+      conditions.push("COALESCE(d.status, 'published') = 'published'");
+    }
+
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -75,7 +94,7 @@ async function getAll(req, res) {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('Error fetching units:', err);
+    console.error('Error fetching courses:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -97,16 +116,16 @@ async function getById(req, res) {
        LEFT JOIN degrees d ON ud.degree_id = d.id
        LEFT JOIN unit_trimesters ut ON u.id = ut.unit_id
        LEFT JOIN unit_offering_patterns uop ON u.id = uop.unit_id
-       WHERE u.id = $1
+       WHERE u.id = $1 ${req.user?.role === 'admin' ? '' : "AND u.status = 'published'"}
        GROUP BY u.id`,
       [id]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Unit not found' });
+      return res.status(404).json({ error: 'Course not found' });
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error fetching unit:', err);
+    console.error('Error fetching course:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -121,12 +140,14 @@ async function getByDegree(req, res) {
        JOIN unit_degrees ud ON u.id = ud.unit_id
        JOIN degrees d ON ud.degree_id = d.id
        WHERE ud.degree_id = $1
+         AND u.status = 'published'
+         AND d.status = 'published'
        ORDER BY u.code ASC`,
       [degreeId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Error fetching units by degree:', err);
+    console.error('Error fetching courses by degree:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -158,6 +179,8 @@ async function getByDegreeAndTrimester(req, res) {
         AND uop_match.period_number = tp.period_number
       LEFT JOIN unit_offering_patterns uop ON u.id = uop.unit_id
       WHERE tp.status = 'published'
+        AND u.status = 'published'
+        AND d.status = 'published'
     `;
     const params = [trimester_id];
     
@@ -170,15 +193,15 @@ async function getByDegreeAndTrimester(req, res) {
     
     const result = await pool.query(query, params);
     
-    const unitsWithStatus = result.rows.map(unit => ({
-      ...unit,
-      has_classes: (unit.classes || []).length > 0,
-      classes_count: (unit.classes || []).length
+    const coursesWithStatus = result.rows.map(course => ({
+      ...course,
+      has_classes: (course.classes || []).length > 0,
+      classes_count: (course.classes || []).length
     }));
     
-    res.json(unitsWithStatus);
+    res.json(coursesWithStatus);
   } catch (err) {
-    console.error('Error fetching units by degree and trimester:', err);
+    console.error('Error fetching courses by degree and teaching period:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -187,7 +210,7 @@ async function create(req, res) {
   const client = await pool.connect();
   try {
     await ensureAcademicSchema();
-    const { name, code, degree_ids, classroom_type, class_duration, trimester_ids, offering_patterns } = req.body;
+    const { name, code, degree_ids, classroom_type, class_duration, trimester_ids, offering_patterns, description, prerequisites, credit_points, source_url, status } = req.body;
 
     if (!name || !code || !degree_ids || degree_ids.length === 0) {
       return res.status(400).json({ error: 'Name, code, and at least one degree_id are required' });
@@ -195,17 +218,38 @@ async function create(req, res) {
 
     await client.query('BEGIN');
 
-    const unitResult = await client.query(
-      `INSERT INTO units (name, code, classroom_type, total_students, class_duration)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name, code.toUpperCase(), classroom_type || 'normal', 0, class_duration || 1]
-    );
-    const newUnit = unitResult.rows[0];
+    const existingCourse = await client.query('SELECT * FROM units WHERE UPPER(code) = $1', [code.toUpperCase()]);
+    let newCourse;
+    if (existingCourse.rows.length > 0) {
+      newCourse = existingCourse.rows[0];
+      const updatedExisting = await client.query(
+        `UPDATE units SET
+          name = COALESCE($1, name),
+          classroom_type = COALESCE($2, classroom_type),
+          class_duration = COALESCE($3, class_duration),
+          description = COALESCE($4, description),
+          prerequisites = COALESCE($5, prerequisites),
+          credit_points = COALESCE($6, credit_points),
+          source_url = COALESCE($7, source_url),
+          status = COALESCE($8, status),
+          updated_at = NOW()
+         WHERE id = $9 RETURNING *`,
+        [name || null, classroom_type || null, class_duration || null, description || null, prerequisites || null, credit_points || null, source_url || null, status ? normalizeStatus(status) : null, newCourse.id]
+      );
+      newCourse = updatedExisting.rows[0];
+    } else {
+      const courseResult = await client.query(
+        `INSERT INTO units (name, code, classroom_type, total_students, class_duration, description, prerequisites, credit_points, source_url, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [name, code.toUpperCase(), classroom_type || 'normal', 0, class_duration || 1, description || null, prerequisites || null, credit_points || null, source_url || null, normalizeStatus(status)]
+      );
+      newCourse = courseResult.rows[0];
+    }
 
     for (const deg_id of degree_ids) {
       await client.query(
-        'INSERT INTO unit_degrees (unit_id, degree_id) VALUES ($1, $2)',
-        [newUnit.id, deg_id]
+        'INSERT INTO unit_degrees (unit_id, degree_id) VALUES ($1, $2) ON CONFLICT (unit_id, degree_id) DO NOTHING',
+        [newCourse.id, deg_id]
       );
     }
 
@@ -213,28 +257,28 @@ async function create(req, res) {
       for (const t_id of trimester_ids) {
         await client.query(
           'INSERT INTO unit_trimesters (unit_id, trimester_id) VALUES ($1, $2)',
-          [newUnit.id, t_id]
+          [newCourse.id, t_id]
         );
       }
     }
-    await replaceOfferingPatterns(client, newUnit.id, offering_patterns || []);
+    await replaceOfferingPatterns(client, newCourse.id, offering_patterns || []);
 
     await client.query('COMMIT');
 
-    newUnit.trimester_ids = trimester_ids || [];
-    newUnit.offering_patterns = normalizeOfferingPatterns(offering_patterns || []);
-    newUnit.degrees = degree_ids.map(id => ({ id }));
+    newCourse.trimester_ids = trimester_ids || [];
+    newCourse.offering_patterns = normalizeOfferingPatterns(offering_patterns || []);
+    newCourse.degrees = degree_ids.map(id => ({ id }));
 
-    res.status(201).json(newUnit);
+    res.status(201).json(newCourse);
   } catch (err) {
     await client.query('ROLLBACK');
     if (err.code === '23505') {
-      return res.status(409).json({ error: 'Unit code already exists' });
+      return res.status(409).json({ error: 'Course code already exists' });
     }
     if (err.code === '23503') {
       return res.status(400).json({ error: 'Invalid reference (degree or trimester not found)' });
     }
-    console.error('Error creating unit:', err);
+    console.error('Error creating course:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -246,14 +290,14 @@ async function update(req, res) {
   try {
     await ensureAcademicSchema();
     const { id } = req.params;
-    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids, offering_patterns } = req.body;
+    const { name, code, degree_ids, classroom_type, total_students, class_duration, trimester_ids, offering_patterns, description, prerequisites, credit_points, source_url, status } = req.body;
 
     await client.query('BEGIN');
 
-    const currentUnit = await client.query('SELECT * FROM units WHERE id = $1', [id]);
-    if (currentUnit.rows.length === 0) {
+    const currentCourse = await client.query('SELECT * FROM units WHERE id = $1', [id]);
+    if (currentCourse.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Unit not found' });
+      return res.status(404).json({ error: 'Course not found' });
     }
 
     if (code) {
@@ -263,7 +307,7 @@ async function update(req, res) {
       );
       if (codeExists.rows.length > 0) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Unit code already exists' });
+        return res.status(409).json({ error: 'Course code already exists' });
       }
     }
 
@@ -274,11 +318,16 @@ async function update(req, res) {
         classroom_type = COALESCE($3, classroom_type),
         total_students = COALESCE($4, total_students),
         class_duration = COALESCE($5, class_duration),
+        description = COALESCE($6, description),
+        prerequisites = COALESCE($7, prerequisites),
+        credit_points = COALESCE($8, credit_points),
+        source_url = COALESCE($9, source_url),
+        status = COALESCE($10, status),
         updated_at = NOW()
-       WHERE id = $6 RETURNING *`,
-      [name, code ? code.toUpperCase() : null, classroom_type, total_students, class_duration, id]
+       WHERE id = $11 RETURNING *`,
+      [name, code ? code.toUpperCase() : null, classroom_type, total_students, class_duration, description || null, prerequisites || null, credit_points || null, source_url || null, status ? normalizeStatus(status) : null, id]
     );
-    const updatedUnit = result.rows[0];
+    const updatedCourse = result.rows[0];
 
     if (Array.isArray(degree_ids)) {
       await client.query('DELETE FROM unit_degrees WHERE unit_id = $1', [id]);
@@ -300,19 +349,19 @@ async function update(req, res) {
           [id, t_id]
         );
       }
-      updatedUnit.trimester_ids = trimester_ids;
+      updatedCourse.trimester_ids = trimester_ids;
     }
 
     if (Array.isArray(offering_patterns)) {
       await replaceOfferingPatterns(client, id, offering_patterns);
-      updatedUnit.offering_patterns = normalizeOfferingPatterns(offering_patterns);
+      updatedCourse.offering_patterns = normalizeOfferingPatterns(offering_patterns);
     }
 
     await client.query('COMMIT');
-    res.json(updatedUnit);
+    res.json(updatedCourse);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error updating unit:', err);
+    console.error('Error updating course:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -325,11 +374,11 @@ async function remove(req, res) {
     const { id } = req.params;
     const result = await pool.query('DELETE FROM units WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Unit not found' });
+      return res.status(404).json({ error: 'Course not found' });
     }
-    res.json({ message: 'Unit deleted successfully' });
+    res.json({ message: 'Course deleted successfully' });
   } catch (err) {
-    console.error('Error deleting unit:', err);
+    console.error('Error deleting course:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -350,7 +399,7 @@ async function updateEnrolledStudents(req, res) {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Unit not found' });
+      return res.status(404).json({ error: 'Course not found' });
     }
 
     res.json(result.rows[0]);
@@ -361,3 +410,4 @@ async function updateEnrolledStudents(req, res) {
 }
 
 module.exports = { getAll, getById, getByDegree, getByDegreeAndTrimester, create, update, updateEnrolledStudents, remove };
+

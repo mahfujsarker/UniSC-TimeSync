@@ -48,7 +48,7 @@ export default function RoutineTable({ entries }) {
                           className="rounded-lg border border-brand-blue/15 bg-blue-50/80 p-2 text-[11px] leading-snug text-surface-800 shadow-sm"
                         >
                           <div className="font-bold text-surface-900">
-                            {entry.unit_name || 'Unknown Unit'} ({entry.unit_code || 'N/A'})
+                            {entry.unit_name || 'Unknown Course'} ({entry.unit_code || 'N/A'})
                           </div>
                           <div>Room: {entry.room_number || 'TBA'}</div>
                           <div>Tutor: {entry.tutor_name || 'TBA'}</div>

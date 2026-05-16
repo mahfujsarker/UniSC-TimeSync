@@ -9,7 +9,7 @@ const ICONS = {
   degrees: (
     <path d="m3 8 9-4 9 4-9 4-9-4Zm4 3v4c0 1.4 2.2 3 5 3s5-1.6 5-3v-4" />
   ),
-  units: (
+  courses: (
     <path d="M6 4h9a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V6a2 2 0 0 1 2-2Zm1 0v13a3 3 0 0 0 3 3" />
   ),
   trimesters: (

@@ -1,6 +1,6 @@
 /**
  * Tutor Controller
- * CRUD operations for tutors and tutor-unit assignments.
+ * CRUD operations for tutors and Tutor-Course assignments.
  */
 const pool = require('../config/db');
 const { ensureTutorAvailabilitySchema } = require('./tutorAvailabilityController');
@@ -177,3 +177,4 @@ async function remove(req, res) {
 }
 
 module.exports = { getAll, getById, create, update, remove };
+

@@ -4,6 +4,7 @@
  * Supports grid-based scheduling (classrooms x time slots).
  */
 const pool = require('../config/db');
+const { ensureAcademicSchema } = require('../utils/academicSchema');
 const {
   checkAvailability: checkTutorAvailability,
   ensureTutorAvailabilitySchema
@@ -114,7 +115,7 @@ async function checkConflicts(classroom_id, tutor_id, class_id, trimester_id, da
       const c = classConflict.rows[0];
       conflicts.push({
         type: 'class',
-        message: `UNIT CONFLICT: ${c.unit_name} ${c.group_name} is already scheduled on ${c.day_of_week} from ${c.start_time} to ${c.end_time}`,
+        message: `COURSE CONFLICT: ${c.unit_name} ${c.group_name} is already scheduled on ${c.day_of_week} from ${c.start_time} to ${c.end_time}`,
         existing: c
       });
     }
@@ -209,6 +210,7 @@ function validateTimeRange(start_time, end_time) {
 async function getAll(req, res) {
   try {
     await ensureTutorAvailabilitySchema();
+    await ensureAcademicSchema();
     const { trimester_id, degree_id, classroom_id, day_of_week } = req.query;
     let query = `
       SELECT te.*,
@@ -257,7 +259,7 @@ async function getAll(req, res) {
       JOIN trimesters tr ON te.trimester_id = tr.id
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
-      WHERE 1=1
+      WHERE u.status = 'published' AND d.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -290,6 +292,7 @@ async function getAll(req, res) {
 
 async function getKanban(req, res) {
   try {
+    await ensureAcademicSchema();
     const { trimesterId } = req.params;
     const { degree_id, classroom_id, day_of_week } = req.query;
 
@@ -304,7 +307,10 @@ async function getKanban(req, res) {
       JOIN classes cl ON te.class_id = cl.id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
-      WHERE te.trimester_id = $1`;
+      JOIN degrees d ON ud.degree_id = d.id
+      WHERE te.trimester_id = $1
+        AND u.status = 'published'
+        AND d.status = 'published'`;
     const params = [trimesterId];
     let paramIdx = 2;
 
@@ -340,6 +346,7 @@ async function getKanban(req, res) {
 
 async function getGrid(req, res) {
   try {
+    await ensureAcademicSchema();
     const { trimesterId, classroom_id, day_of_week } = req.query;
     
     const trimResult = await pool.query('SELECT * FROM trimesters WHERE id = $1', [trimesterId]);
@@ -368,6 +375,7 @@ async function getGrid(req, res) {
       JOIN classes cl ON te.class_id = cl.id
       JOIN tutors t ON te.tutor_id = t.id
       WHERE te.trimester_id = $1
+        AND u.status = 'published'
     `;
     const entryParams = [trimesterId];
 
@@ -463,7 +471,13 @@ async function create(req, res) {
       return res.status(400).json({ error: timeErrors.join(', ') });
     }
 
-    const classResult = await client.query('SELECT * FROM classes WHERE id = $1', [class_id]);
+    const classResult = await client.query(
+      `SELECT cl.*
+       FROM classes cl
+       JOIN units u ON cl.unit_id = u.id
+       WHERE cl.id = $1 AND u.status = 'published'`,
+      [class_id]
+    );
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }
@@ -618,7 +632,13 @@ async function scheduleClass(req, res) {
       return res.status(400).json({ error: timeErrors.join(', ') });
     }
 
-    const classResult = await client.query('SELECT * FROM classes WHERE id = $1', [class_id]);
+    const classResult = await client.query(
+      `SELECT cl.*
+       FROM classes cl
+       JOIN units u ON cl.unit_id = u.id
+       WHERE cl.id = $1 AND u.status = 'published'`,
+      [class_id]
+    );
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }

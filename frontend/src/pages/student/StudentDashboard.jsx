@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { path: '/student', icon: 'dashboard', label: 'Dashboard', end: true },
   { path: '/student/timetable', icon: 'view', label: 'View-Only Timetable' },
   { path: '/student/select-classes', icon: 'degrees', label: 'Select Classes' },
-  { path: '/student/my-classes', icon: 'units', label: 'My Classes' },
+  { path: '/student/my-classes', icon: 'courses', label: 'My Classes' },
 ];
 
 export default function StudentDashboard() {

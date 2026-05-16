@@ -27,6 +27,13 @@ CREATE TABLE IF NOT EXISTS degrees (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    degree_type VARCHAR(100),
+    campus VARCHAR(255),
+    study_mode VARCHAR(100),
+    duration VARCHAR(100),
+    source_url TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'reviewed', 'published', 'archived')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -87,7 +94,7 @@ CREATE TABLE IF NOT EXISTS classrooms (
 );
 
 -- ============================================
--- Units / Courses
+-- Courses
 -- ============================================
 CREATE TABLE IF NOT EXISTS units (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -96,12 +103,31 @@ CREATE TABLE IF NOT EXISTS units (
     classroom_type VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK (classroom_type IN ('lab', 'normal')),
     total_students INTEGER NOT NULL DEFAULT 0,
     class_duration INTEGER NOT NULL DEFAULT 1 CHECK (class_duration >= 1 AND class_duration <= 4),
+    description TEXT,
+    prerequisites TEXT,
+    credit_points VARCHAR(50),
+    source_url TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'reviewed', 'published', 'archived')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ============================================
--- Unit-Degree associations (many-to-many)
+-- Degree & Course URL Import Drafts
+-- ============================================
+CREATE TABLE IF NOT EXISTS degree_course_imports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_url TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'reviewed', 'published', 'archived')),
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    published_at TIMESTAMP WITH TIME ZONE
+);
+
+-- ============================================
+-- Course-Degree associations (many-to-many)
 -- ============================================
 CREATE TABLE IF NOT EXISTS unit_degrees (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -111,7 +137,7 @@ CREATE TABLE IF NOT EXISTS unit_degrees (
 );
 
 -- ============================================
--- Unit-Trimester associations (many-to-many)
+-- Course-Teaching Period associations (many-to-many)
 -- Legacy compatibility. Generic offering rules use unit_offering_patterns.
 -- ============================================
 CREATE TABLE IF NOT EXISTS unit_trimesters (
@@ -122,13 +148,17 @@ CREATE TABLE IF NOT EXISTS unit_trimesters (
 );
 
 -- ============================================
--- Generic Unit Offering Patterns
+-- Generic Course Offering Patterns (compatibility table name: unit_offering_patterns)
 -- ============================================
 CREATE TABLE IF NOT EXISTS unit_offering_patterns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
-    period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('TRIMESTER', 'SESSION')),
-    period_number INTEGER NOT NULL CHECK (period_number IN (1, 2, 3)),
+    period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('TRIMESTER', 'SESSION', 'SEMESTER')),
+    period_number INTEGER NOT NULL CHECK (
+        (period_type = 'TRIMESTER' AND period_number BETWEEN 1 AND 3)
+        OR (period_type = 'SEMESTER' AND period_number BETWEEN 1 AND 2)
+        OR (period_type = 'SESSION' AND period_number BETWEEN 1 AND 8)
+    ),
     code VARCHAR(20) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -147,7 +177,7 @@ CREATE TABLE IF NOT EXISTS tutors (
 );
 
 -- ============================================
--- Tutor-Unit assignments (many-to-many)
+-- Tutor-Course assignments (many-to-many)
 -- ============================================
 CREATE TABLE IF NOT EXISTS tutor_units (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -279,3 +309,4 @@ CREATE INDEX IF NOT EXISTS idx_tutor_availability_trimester ON tutor_availabilit
 CREATE INDEX IF NOT EXISTS idx_timetable_day ON timetable_entries(day_of_week);
 CREATE INDEX IF NOT EXISTS idx_student_selections_user ON student_selections(user_id);
 CREATE INDEX IF NOT EXISTS idx_student_selections_entry ON student_selections(timetable_entry_id);
+

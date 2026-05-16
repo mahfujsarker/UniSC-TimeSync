@@ -40,8 +40,8 @@ INSERT INTO tutors (name, email) VALUES
 ('Dr. Emily Rodriguez', 'emily.rodriguez@ttms.edu'),
 ('Prof. Michael Brown', 'michael.brown@ttms.edu');
 
--- Insert units with new fields (total_students, class_duration)
-INSERT INTO units (name, code, classroom_type, total_students, class_duration) VALUES
+-- Insert courses with new fields (total_students, class_duration)
+INSERT INto courses (name, code, classroom_type, total_students, class_duration) VALUES
 ('Introduction to Programming', 'ICT100', 'lab', 60, 2),
 ('Data Structures', 'ICT200', 'normal', 45, 2),
 ('Database Systems', 'ICT210', 'lab', 50, 2),
@@ -49,7 +49,7 @@ INSERT INTO units (name, code, classroom_type, total_students, class_duration) V
 ('Advanced Algorithms', 'ICT300', 'normal', 30, 1),
 ('Machine Learning', 'ICT400', 'lab', 25, 3);
 
--- Assign units to degrees
+-- Assign courses to degrees
 INSERT INTO unit_degrees (unit_id, degree_id) VALUES
 ((SELECT id FROM units WHERE code = 'ICT100'), (SELECT id FROM degrees WHERE code = 'BCS')),
 ((SELECT id FROM units WHERE code = 'ICT200'), (SELECT id FROM degrees WHERE code = 'BCS')),
@@ -58,7 +58,7 @@ INSERT INTO unit_degrees (unit_id, degree_id) VALUES
 ((SELECT id FROM units WHERE code = 'ICT300'), (SELECT id FROM degrees WHERE code = 'BCS')),
 ((SELECT id FROM units WHERE code = 'ICT400'), (SELECT id FROM degrees WHERE code = 'ICT-MSC'));
 
--- Assign units to generic offering patterns
+-- Assign courses to generic offering patterns
 INSERT INTO unit_offering_patterns (unit_id, period_type, period_number, code) VALUES
 ((SELECT id FROM units WHERE code = 'ICT100'), 'TRIMESTER', 1, 'T1'),
 ((SELECT id FROM units WHERE code = 'ICT200'), 'TRIMESTER', 1, 'T1'),
@@ -67,7 +67,7 @@ INSERT INTO unit_offering_patterns (unit_id, period_type, period_number, code) V
 ((SELECT id FROM units WHERE code = 'ICT300'), 'TRIMESTER', 1, 'T1'),
 ((SELECT id FROM units WHERE code = 'ICT400'), 'TRIMESTER', 1, 'T1');
 
--- Assign tutors to units
+-- Assign tutors to courses
 INSERT INTO tutor_units (tutor_id, unit_id) VALUES
 ((SELECT id FROM tutors WHERE email = 'sarah.chen@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT100')),
 ((SELECT id FROM tutors WHERE email = 'james.wilson@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT200')),
@@ -120,3 +120,4 @@ INSERT INTO timetable_entries (class_id, unit_id, classroom_id, tutor_id, trimes
 INSERT INTO academic_calendar (name, start_date, end_date, trimester_id) VALUES
 ('Trimester 1, 2026 - Teaching Period', '2026-03-02', '2026-05-29', (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1)),
 ('Trimester 1, 2026 - Exam Period', '2026-06-01', '2026-06-19', (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1));
+

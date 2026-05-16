@@ -58,10 +58,12 @@
   body {
     @apply bg-surface-100 text-brand-dark font-sans antialiased;
     background:
-      radial-gradient(circle at top left, rgba(0, 82, 196, 0.16), transparent 34rem),
-      radial-gradient(circle at 85% 10%, rgba(255, 221, 21, 0.22), transparent 28rem),
+      radial-gradient(circle at 12% 8%, rgba(0, 82, 196, 0.18), transparent 30rem),
+      radial-gradient(circle at 88% 2%, rgba(255, 221, 21, 0.24), transparent 28rem),
+      radial-gradient(circle at 70% 86%, rgba(13, 202, 240, 0.12), transparent 34rem),
       linear-gradient(135deg, #f8fbff 0%, #eef4fb 44%, #ffffff 100%);
     min-height: 100vh;
+    scroll-behavior: smooth;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -73,26 +75,42 @@
 @layer components {
   /* Cards */
   .glass-card {
-    @apply rounded-xl border border-white/70 shadow-sm transition-all duration-200;
-    background: rgba(255, 255, 255, 0.76);
-    backdrop-filter: blur(22px) saturate(160%);
-    box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    @apply rounded-2xl border border-white/75 shadow-sm transition-all duration-300;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58)),
+      radial-gradient(circle at 20% 0%, rgba(255,255,255,0.9), transparent 38%);
+    backdrop-filter: blur(26px) saturate(170%);
+    -webkit-backdrop-filter: blur(26px) saturate(170%);
+    box-shadow:
+      0 22px 65px rgba(15, 23, 42, 0.09),
+      0 1px 2px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(255,255,255,0.45);
   }
   .glass-card:hover {
     @apply border-white shadow-md;
     transform: translateY(-1px);
   }
   .glass-panel {
-    @apply rounded-xl border border-white/70;
-    background: linear-gradient(145deg, rgba(255,255,255,0.82), rgba(255,255,255,0.64));
-    backdrop-filter: blur(24px) saturate(165%);
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+    @apply rounded-2xl border border-white/75;
+    background:
+      linear-gradient(150deg, rgba(255,255,255,0.84), rgba(255,255,255,0.6)),
+      radial-gradient(circle at top left, rgba(255,255,255,0.82), transparent 42%);
+    backdrop-filter: blur(28px) saturate(175%);
+    -webkit-backdrop-filter: blur(28px) saturate(175%);
+    box-shadow:
+      0 24px 70px rgba(15, 23, 42, 0.09),
+      inset 0 1px 0 rgba(255,255,255,0.92),
+      inset 0 -1px 0 rgba(255,255,255,0.48);
   }
 
   /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-blue/30 focus:ring-offset-2 focus:ring-offset-transparent;
+    box-shadow: 0 10px 26px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
   }
   .btn:active {
     @apply scale-[0.98];
@@ -106,8 +124,9 @@
   }
   .btn-secondary {
     @apply border border-white/70 text-brand-dark hover:border-brand-blue hover:text-brand-blue;
-    background: rgba(255, 255, 255, 0.58);
-    backdrop-filter: blur(14px);
+    background: linear-gradient(145deg, rgba(255,255,255,0.76), rgba(255,255,255,0.48));
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
   }
   .btn-danger {
     @apply border border-danger/40 text-danger hover:bg-danger hover:text-white;
@@ -128,9 +147,11 @@
     @apply text-sm font-semibold text-surface-700;
   }
   .form-input, .form-select {
-    @apply px-3 py-2.5 border border-white/70 rounded-lg text-brand-dark text-sm transition-all duration-200 outline-none w-full;
-    background: rgba(255,255,255,0.76);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    @apply px-3 py-2.5 border border-white/75 rounded-xl text-brand-dark text-sm transition-all duration-200 outline-none w-full;
+    background: linear-gradient(145deg, rgba(255,255,255,0.82), rgba(255,255,255,0.62));
+    box-shadow: 0 8px 22px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
   }
   .form-input:focus, .form-select:focus {
     @apply border-brand-blue ring-2 ring-brand-blue/20;
@@ -146,12 +167,13 @@
   }
   .data-table th {
     @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-surface-600 border-b border-white/70;
-    background: rgba(248, 249, 250, 0.72);
-    backdrop-filter: blur(14px);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
   }
   .data-table td {
     @apply px-4 py-3 text-sm text-surface-800 border-b border-white/60;
-    background: rgba(255, 255, 255, 0.58);
+    background: rgba(255, 255, 255, 0.62);
   }
   .data-table tbody tr:hover td {
     background: rgba(238, 242, 255, 0.54);
@@ -162,20 +184,24 @@
     @apply grid grid-cols-1 md:grid-cols-5 gap-4 min-h-[500px];
   }
   .kanban-column {
-    @apply rounded-xl p-4 min-h-[400px] border border-white/70;
-    background: rgba(255,255,255,0.55);
-    backdrop-filter: blur(18px);
+    @apply rounded-2xl p-4 min-h-[400px] border border-white/75;
+    background: linear-gradient(145deg, rgba(255,255,255,0.68), rgba(255,255,255,0.42));
+    backdrop-filter: blur(22px) saturate(165%);
+    -webkit-backdrop-filter: blur(22px) saturate(165%);
   }
   .kanban-column-header {
     @apply font-heading text-sm font-bold uppercase tracking-wider text-brand-dark mb-4 pb-3 border-b-2 border-brand-blue flex items-center justify-between;
   }
   .kanban-card {
-    @apply border border-white/70 rounded-lg p-3.5 mb-2.5 cursor-grab transition-all duration-200 hover:border-brand-blue hover:shadow-md;
-    background: rgba(255,255,255,0.78);
-    backdrop-filter: blur(14px);
+    @apply border border-white/75 rounded-xl p-3.5 mb-2.5 cursor-grab transition-all duration-200 hover:border-brand-blue hover:shadow-md;
+    background: linear-gradient(145deg, rgba(255,255,255,0.86), rgba(255,255,255,0.56));
+    backdrop-filter: blur(18px) saturate(165%);
+    -webkit-backdrop-filter: blur(18px) saturate(165%);
+    box-shadow: 0 12px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
   }
   .kanban-card.is-dragging {
-    @apply shadow-lg border-brand-blue rotate-2 scale-[1.02];
+    @apply shadow-lg border-brand-blue scale-[1.02];
+    box-shadow: 0 24px 56px rgba(0,82,196,0.2), inset 0 1px 0 rgba(255,255,255,0.94);
   }
   .kanban-card-title {
     @apply font-semibold text-[13px] text-brand-dark mb-1.5;
@@ -186,7 +212,11 @@
 
   /* Timetable Grid */
   .timetable-grid-container {
-    @apply bg-white rounded-lg border border-surface-200 overflow-hidden;
+    @apply rounded-2xl border border-white/75 overflow-hidden;
+    background: rgba(255,255,255,0.56);
+    backdrop-filter: blur(24px) saturate(165%);
+    -webkit-backdrop-filter: blur(24px) saturate(165%);
+    box-shadow: 0 22px 65px rgba(15,23,42,0.09), inset 0 1px 0 rgba(255,255,255,0.9);
   }
   .time-column {
     @apply bg-surface-100;
@@ -222,7 +252,7 @@
   .class-pool-empty {
     @apply bg-surface-50 rounded-lg border border-surface-200;
   }
-  .unit-group {
+  .course-group {
     @apply mb-4;
   }
 
@@ -233,9 +263,12 @@
   .app-sidebar {
     @apply fixed left-4 top-4 bottom-4 z-40 flex flex-col rounded-2xl border border-white/70 transition-all duration-300;
     width: var(--sidebar-width);
-    background: linear-gradient(160deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58));
-    backdrop-filter: blur(28px) saturate(170%);
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255,255,255,0.92);
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.84), rgba(255,255,255,0.56)),
+      radial-gradient(circle at 20% 0%, rgba(255,255,255,0.92), transparent 42%);
+    backdrop-filter: blur(34px) saturate(180%);
+    -webkit-backdrop-filter: blur(34px) saturate(180%);
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255,255,255,0.94);
   }
   .sidebar-brand {
     @apply flex items-center gap-3 px-4 py-5 border-b border-white/60 overflow-hidden;
@@ -325,8 +358,9 @@
   .app-navbar {
     @apply fixed top-4 right-4 z-30 h-16 rounded-2xl border border-white/70 flex items-center justify-between px-4 sm:px-6 transition-all duration-300;
     left: calc(var(--sidebar-width) + 2rem);
-    background: rgba(255,255,255,0.74);
-    backdrop-filter: blur(26px) saturate(170%);
+    background: linear-gradient(145deg, rgba(255,255,255,0.78), rgba(255,255,255,0.54));
+    backdrop-filter: blur(30px) saturate(175%);
+    -webkit-backdrop-filter: blur(30px) saturate(175%);
     box-shadow: 0 20px 55px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255,255,255,0.9);
   }
   .app-main {
@@ -348,9 +382,12 @@
   }
   .page-header {
     @apply mb-6 flex flex-col gap-4 rounded-2xl border border-white/70 p-5 sm:flex-row sm:items-end sm:justify-between;
-    background: linear-gradient(145deg, rgba(255,255,255,0.82), rgba(255,255,255,0.56));
-    backdrop-filter: blur(24px) saturate(165%);
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.92);
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.84), rgba(255,255,255,0.56)),
+      radial-gradient(circle at 8% 0%, rgba(0,82,196,0.08), transparent 34%);
+    backdrop-filter: blur(28px) saturate(175%);
+    -webkit-backdrop-filter: blur(28px) saturate(175%);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(255,255,255,0.94);
   }
   .page-kicker {
     @apply text-xs font-black uppercase tracking-[0.16em] text-brand-blue;
@@ -407,10 +444,148 @@
     @apply h-full rounded-full bg-brand-blue transition-all duration-500;
   }
   .empty-state {
-    @apply rounded-2xl border border-dashed border-white/80 bg-white/45 p-10 text-center text-sm text-surface-500;
+    @apply rounded-2xl border border-dashed border-white/80 p-10 text-center text-sm text-surface-500;
+    background: linear-gradient(145deg, rgba(255,255,255,0.62), rgba(255,255,255,0.34));
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
   .empty-state.compact {
     @apply p-5;
+  }
+  .glass-input-large {
+    @apply py-3;
+    background: linear-gradient(135deg, rgba(255,255,255,0.86), rgba(255,255,255,0.62));
+  }
+  .degree-card {
+    @apply overflow-hidden p-5 transition-all duration-200;
+  }
+  .degree-card:hover {
+    box-shadow: 0 24px 70px rgba(0, 82, 196, 0.1), inset 0 1px 0 rgba(255,255,255,0.92);
+  }
+  .degree-card-toggle {
+    @apply w-full rounded-xl p-2 -m-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-blue/30;
+  }
+  .degree-card-toggle:hover {
+    background: rgba(255,255,255,0.34);
+  }
+  .course-card {
+    @apply rounded-xl border border-white/70 p-3 transition-all duration-200;
+    background: linear-gradient(135deg, rgba(255,255,255,0.7), rgba(255,255,255,0.48));
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255,255,255,0.85);
+  }
+  .course-card:hover {
+    @apply border-brand-blue/30;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 42px rgba(0,82,196,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  .chevron {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/80 text-brand-blue transition-all duration-300;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255,255,255,0.46)),
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.96), transparent 40%);
+    box-shadow: 0 10px 24px rgba(0,82,196,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
+  }
+  .chevron.small {
+    @apply h-6 w-6;
+  }
+  .chevron svg {
+    @apply h-4 w-4 transition-transform duration-300;
+  }
+  .chevron.is-open {
+    transform: scale(1.04);
+    background: linear-gradient(145deg, rgba(230,238,255,0.92), rgba(255,255,255,0.56));
+  }
+  .chevron.is-open svg {
+    transform: rotate(90deg);
+  }
+  .collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 0.24s ease, opacity 0.2s ease;
+  }
+
+  .liquid-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,82,196,0.36) rgba(255,255,255,0.38);
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+  }
+  .liquid-scroll::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  .liquid-scroll::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.38);
+    border-radius: 999px;
+  }
+  .liquid-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(0,82,196,0.42), rgba(0,82,196,0.22));
+    border: 3px solid rgba(255,255,255,0.7);
+    border-radius: 999px;
+  }
+  .timetable-dnd-board {
+    @apply overflow-auto;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    contain: layout paint;
+  }
+  .timetable-board-header {
+    background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(255,255,255,0.68));
+    backdrop-filter: blur(24px) saturate(170%);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    box-shadow: 0 10px 26px rgba(15,23,42,0.07), inset 0 1px 0 rgba(255,255,255,0.95);
+  }
+  .timetable-time-cell {
+    @apply h-12 flex items-start justify-end pr-3 pt-1 text-xs font-semibold text-surface-600 border-b border-r;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    border-color: rgba(148,163,184,0.34);
+    background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(255,255,255,0.62));
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+  }
+  .timetable-drop-cell {
+    @apply relative h-12 border-b border-r transition-all duration-150;
+    border-color: rgba(148,163,184,0.34);
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.38), rgba(255,255,255,0.2)),
+      linear-gradient(to bottom, rgba(255,255,255,0.42), rgba(255,255,255,0.16));
+  }
+  .timetable-drop-cell:nth-child(even) {
+    background-color: rgba(255,255,255,0.36);
+  }
+  .timetable-drop-cell.is-over {
+    background: rgba(236, 253, 245, 0.84);
+    box-shadow: inset 0 0 0 2px rgba(16,185,129,0.55), inset 0 0 28px rgba(16,185,129,0.12);
+  }
+  .timetable-entry-card {
+    @apply rounded-xl p-1.5 cursor-grab overflow-hidden text-[10px] border shadow-sm transition-shadow duration-150;
+    background: linear-gradient(145deg, rgba(255,255,255,0.88), rgba(255,255,255,0.58));
+    backdrop-filter: blur(18px) saturate(165%);
+    -webkit-backdrop-filter: blur(18px) saturate(165%);
+    box-shadow: 0 10px 22px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.86);
+    transform: translateZ(0);
+  }
+  .timetable-entry-card:hover {
+    box-shadow: 0 16px 32px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  .timetable-entry-card.is-dragging {
+    @apply cursor-grabbing;
+    box-shadow: 0 24px 52px rgba(0,82,196,0.22), 0 0 0 2px rgba(0,82,196,0.2), inset 0 1px 0 rgba(255,255,255,0.94);
+    will-change: transform;
+  }
+  .timetable-entry-card.has-warning {
+    background: linear-gradient(145deg, rgba(255,248,225,0.94), rgba(255,255,255,0.62));
+    box-shadow: 0 12px 30px rgba(245,158,11,0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  .collapsible > * {
+    overflow: hidden;
+  }
+  .collapsible.is-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
   }
   .alert-card {
     @apply rounded-xl border px-4 py-3 text-sm font-semibold;
