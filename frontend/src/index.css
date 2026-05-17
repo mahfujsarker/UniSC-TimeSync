@@ -529,29 +529,155 @@
     scroll-behavior: smooth;
     overscroll-behavior: contain;
     contain: layout paint;
+    height: clamp(34rem, calc(100vh - 14.5rem), 62rem);
+    max-height: calc(100vh - 14.5rem);
+    transform: translateZ(0);
+    isolation: isolate;
+  }
+  .timetable-workspace {
+    @apply flex flex-col gap-3;
+    min-height: calc(100vh - 7rem);
+  }
+  .timetable-toolbar {
+    @apply flex flex-col gap-3 p-3 xl:flex-row xl:items-end xl:justify-between;
+  }
+  .timetable-toolbar-controls {
+    @apply grid flex-1 grid-cols-1 gap-2 md:grid-cols-3 xl:max-w-4xl;
+  }
+  .toolbar-field {
+    @apply flex min-w-[10rem] flex-col gap-1;
+  }
+  .toolbar-field span {
+    @apply text-[11px] font-black uppercase tracking-[0.12em] text-surface-500;
+  }
+  .toolbar-field .form-select {
+    @apply py-2 text-xs;
+  }
+  .timetable-main {
+    @apply grid min-h-0 gap-3;
+  }
+  .timetable-main.has-course-panel {
+    grid-template-columns: minmax(17rem, 19rem) minmax(0, 1fr);
+  }
+  .timetable-main.course-panel-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .timetable-course-panel {
+    @apply min-h-0 p-3;
+    height: clamp(34rem, calc(100vh - 14.5rem), 62rem);
+    max-height: calc(100vh - 14.5rem);
+  }
+  .timetable-course-list {
+    @apply space-y-2 overflow-y-auto pr-1;
+    max-height: calc(100% - 4.25rem);
+  }
+  .timetable-board-shell {
+    @apply min-w-0 min-h-0;
+  }
+  .timetable-board-title {
+    @apply mb-2 flex min-h-10 items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/45 px-3 py-2 backdrop-blur-xl;
+  }
+  .zoom-control {
+    @apply inline-flex items-center gap-1 rounded-xl border border-white/70 bg-white/60 p-1 text-xs font-black text-surface-700 shadow-sm backdrop-blur-xl;
+  }
+  .zoom-control button {
+    @apply inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-2 transition-all hover:bg-white/85 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/25 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .zoom-control span {
+    @apply min-w-12 text-center text-[11px] text-brand-dark;
+  }
+  .zoom-control .zoom-reset {
+    @apply min-w-12 text-[10px] font-bold;
+  }
+  .zoom-control .zoom-fit {
+    @apply min-w-20 text-[10px] font-bold;
+  }
+  .timetable-dnd-board.is-board-dragging,
+  .timetable-dnd-board.is-board-dragging .timetable-entry-card,
+  .timetable-dnd-board.is-board-dragging .timetable-drop-cell,
+  .timetable-dnd-board.is-board-dragging .timetable-board-header,
+  .timetable-dnd-board.is-board-dragging .timetable-time-cell {
+    transition-duration: 0ms;
+  }
+  .timetable-dnd-board.is-board-dragging .timetable-drop-cell,
+  .timetable-dnd-board.is-board-dragging .timetable-time-cell {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .timetable-dnd-board.is-board-dragging .timetable-entry-card:not(.is-dragging) {
+    box-shadow: 0 4px 12px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.86);
   }
   .timetable-board-header {
+    position: sticky;
+    top: 0;
+    z-index: 80;
     background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(255,255,255,0.68));
     backdrop-filter: blur(24px) saturate(170%);
     -webkit-backdrop-filter: blur(24px) saturate(170%);
     box-shadow: 0 10px 26px rgba(15,23,42,0.07), inset 0 1px 0 rgba(255,255,255,0.95);
   }
+  .timetable-corner-cell {
+    @apply row-span-2 flex items-center justify-center border-b border-r border-white/70 font-black text-surface-800;
+    min-height: calc(var(--slot-height, 48px) * 2);
+  }
+  .timetable-room-header {
+    @apply flex min-w-0 items-center justify-center border-b border-r border-white/70 px-1 font-black text-surface-900;
+    min-height: var(--slot-height, 48px);
+    font-size: clamp(0.5rem, calc(0.72rem * var(--board-zoom, 1)), 0.875rem);
+    line-height: 1.05;
+  }
+  .timetable-room-header .room-number-label {
+    @apply min-w-0 truncate;
+  }
+  .timetable-room-header .room-type-pill {
+    white-space: nowrap;
+  }
+  .timetable-dnd-board[style*="--board-zoom: 0.35"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.36"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.37"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.38"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.39"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.4"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.41"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.42"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.43"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.44"] .room-type-pill,
+  .timetable-dnd-board[style*="--board-zoom: 0.45"] .room-type-pill {
+    display: none;
+  }
+  .timetable-day-header {
+    @apply flex min-w-0 items-center justify-center border-b border-r border-white/70 bg-white/60 px-1 font-bold text-surface-800;
+    min-height: var(--slot-height, 48px);
+    font-size: clamp(0.5rem, calc(0.75rem * var(--board-zoom, 1)), 0.75rem);
+    line-height: 1;
+  }
+  .timetable-grid-body {
+    padding-bottom: max(0.5rem, calc(var(--slot-height, 48px) * 0.2));
+  }
   .timetable-time-cell {
-    @apply h-12 flex items-start justify-end pr-3 pt-1 text-xs font-semibold text-surface-600 border-b border-r;
+    @apply flex items-start justify-end font-semibold text-surface-700 border-b border-r;
     position: sticky;
     left: 0;
-    z-index: 10;
+    z-index: 50;
+    min-height: var(--slot-height, 48px);
+    padding: max(0.125rem, calc(var(--slot-height, 48px) * 0.08)) max(0.375rem, calc(var(--slot-height, 48px) * 0.18)) 0 0.25rem;
+    font-size: clamp(0.5rem, calc(0.75rem * var(--board-zoom, 1)), 0.75rem);
+    line-height: 1.05;
     border-color: rgba(148,163,184,0.34);
     background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(255,255,255,0.62));
     backdrop-filter: blur(18px) saturate(160%);
     -webkit-backdrop-filter: blur(18px) saturate(160%);
   }
   .timetable-drop-cell {
-    @apply relative h-12 border-b border-r transition-all duration-150;
+    @apply relative border-b border-r transition-all duration-150;
+    min-height: var(--slot-height, 48px);
+    overflow: visible;
+    z-index: 1;
     border-color: rgba(148,163,184,0.34);
     background-image:
       linear-gradient(to right, rgba(255,255,255,0.38), rgba(255,255,255,0.2)),
       linear-gradient(to bottom, rgba(255,255,255,0.42), rgba(255,255,255,0.16));
+    transform: translateZ(0);
   }
   .timetable-drop-cell:nth-child(even) {
     background-color: rgba(255,255,255,0.36);
@@ -559,26 +685,53 @@
   .timetable-drop-cell.is-over {
     background: rgba(236, 253, 245, 0.84);
     box-shadow: inset 0 0 0 2px rgba(16,185,129,0.55), inset 0 0 28px rgba(16,185,129,0.12);
+    z-index: 20;
+  }
+  .timetable-drop-cell.has-entry {
+    z-index: 25;
+  }
+  .timetable-drop-cell.has-entry.is-over {
+    z-index: 35;
   }
   .timetable-entry-card {
-    @apply rounded-xl p-1.5 cursor-grab overflow-hidden text-[10px] border shadow-sm transition-shadow duration-150;
-    background: linear-gradient(145deg, rgba(255,255,255,0.88), rgba(255,255,255,0.58));
-    backdrop-filter: blur(18px) saturate(165%);
-    -webkit-backdrop-filter: blur(18px) saturate(165%);
-    box-shadow: 0 10px 22px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.86);
+    @apply rounded-xl cursor-grab overflow-hidden border shadow-sm transition-shadow duration-150;
+    padding: clamp(0.12rem, calc(0.375rem * var(--board-zoom, 1)), 0.5rem);
+    font-size: var(--board-card-font, 10px);
+    background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,247,255,0.94));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 8px 18px rgba(15,23,42,0.22), 0 0 0 1px rgba(255,255,255,0.9), inset 0 1px 0 rgba(255,255,255,0.96);
     transform: translateZ(0);
+    backface-visibility: hidden;
+    touch-action: none;
+    user-select: none;
+    z-index: 30;
+    color: #111111;
   }
   .timetable-entry-card:hover {
     box-shadow: 0 16px 32px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.9);
   }
+  .timetable-entry-card.is-compact {
+    @apply rounded-lg;
+    line-height: 1.05;
+  }
+  .timetable-entry-card.is-compact div {
+    font-size: 8px;
+    line-height: 1.05;
+  }
+  .timetable-entry-card.is-roomy {
+    padding: 0.45rem;
+  }
   .timetable-entry-card.is-dragging {
     @apply cursor-grabbing;
-    box-shadow: 0 24px 52px rgba(0,82,196,0.22), 0 0 0 2px rgba(0,82,196,0.2), inset 0 1px 0 rgba(255,255,255,0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 18px 38px rgba(0,82,196,0.24), 0 0 0 2px rgba(0,82,196,0.28), inset 0 1px 0 rgba(255,255,255,0.96);
     will-change: transform;
   }
   .timetable-entry-card.has-warning {
-    background: linear-gradient(145deg, rgba(255,248,225,0.94), rgba(255,255,255,0.62));
-    box-shadow: 0 12px 30px rgba(245,158,11,0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+    background: linear-gradient(145deg, rgba(255,248,225,0.98), rgba(255,255,255,0.94));
+    box-shadow: 0 12px 30px rgba(245,158,11,0.24), 0 0 0 1px rgba(245,158,11,0.2), inset 0 1px 0 rgba(255,255,255,0.94);
   }
   .collapsible > * {
     overflow: hidden;
@@ -768,6 +921,17 @@
   }
   .kanban-board {
     @apply grid-cols-3;
+  }
+  .timetable-main.has-course-panel {
+    grid-template-columns: 1fr;
+  }
+  .timetable-course-panel {
+    height: auto;
+    max-height: 20rem;
+  }
+  .timetable-dnd-board {
+    height: clamp(32rem, calc(100vh - 13rem), 54rem);
+    max-height: calc(100vh - 13rem);
   }
 }
 

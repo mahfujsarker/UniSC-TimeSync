@@ -3,7 +3,7 @@
  * Kanban board layout with rooms as rows, days as columns, time slots as sub-rows.
  * Enrolled student numbers entered per course before generating classes.
  */
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
@@ -14,13 +14,20 @@ import Toast from '../../components/Toast';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const TIME_SLOTS = [];
-for (let hour = 8; hour < 22; hour++) {
+for (let hour = 8; hour <= 22; hour++) {
   TIME_SLOTS.push(`${hour.toString().padStart(2, '0')}:00`);
-  TIME_SLOTS.push(`${hour.toString().padStart(2, '0')}:30`);
+  if (hour < 22) {
+    TIME_SLOTS.push(`${hour.toString().padStart(2, '0')}:30`);
+  }
 }
 
 const BOARD_END_MINUTES = 22 * 60;
 const SLOT_HEIGHT = 48;
+const ZOOM_MIN = 0.35;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
+const ZOOM_STORAGE_KEY = 'ttms:timetable-board-zoom';
+const BOARD_HEADER_ROWS = 2;
 
 const DAY_COLORS = {
   Monday: '#6366f1',
@@ -28,6 +35,13 @@ const DAY_COLORS = {
   Wednesday: '#06b6d4',
   Thursday: '#f59e0b',
   Friday: '#10b981',
+};
+const DAY_SHORT_LABELS = {
+  Monday: 'Mon',
+  Tuesday: 'Tue',
+  Wednesday: 'Wed',
+  Thursday: 'Thu',
+  Friday: 'Fri',
 };
 
 const MINI_MAP_COLORS = ['#0052c4', '#198754', '#f59e0b', '#8b5cf6', '#dc3545', '#06b6d4', '#111111'];
@@ -172,6 +186,81 @@ function ClassLocationMiniMap({ classrooms, courseEntries, onFocusEntry }) {
   );
 }
 
+const TimetableEntryCard = memo(function TimetableEntryCard({
+  entry,
+  provided,
+  snapshot,
+  height,
+  zoomLevel,
+  dayColor,
+  focused,
+  hasWarning,
+  borderClass,
+  onEntryClick
+}) {
+  const compact = zoomLevel < 0.72;
+  const roomy = zoomLevel >= 1.05;
+  const tiny = height < 24;
+  const conflictTitle = hasWarning
+    ? 'Current tutor is no longer available at this time. Assign a new tutor or move the class.'
+    : undefined;
+  const tooltip = [
+    `${entry.unit_code || 'N/A'} ${entry.unit_name || ''}`.trim(),
+    `Group: ${entry.group_name || 'N/A'}`,
+    `Room: ${entry.room_number || 'TBA'}`,
+    `Tutor: ${entry.tutor_name || 'TBA'}`,
+    `Time: ${entry.start_time?.substring(0, 5) || ''}-${entry.end_time?.substring(0, 5) || ''}`
+  ].filter(Boolean).join('\n');
+
+  const card = (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
+      id={`timetable-entry-${entry.id}`}
+      className={`${snapshot.isDragging ? 'z-50 is-dragging' : 'absolute left-1 right-1 z-30'} timetable-entry-card ${compact ? 'is-compact' : ''} ${roomy ? 'is-roomy' : ''} ${hasWarning ? 'has-warning border-amber-400 ring-2 ring-amber-400/35' : borderClass} ${focused ? 'timetable-focus-glow' : ''}`}
+      title={conflictTitle || tooltip}
+      style={{
+        height: `${height}px`,
+        top: snapshot.isDragging ? undefined : '2px',
+        borderLeft: `3px solid ${hasWarning ? '#f59e0b' : dayColor}`,
+        willChange: snapshot.isDragging ? 'transform' : undefined,
+        ...provided.draggableProps.style
+      }}
+      onClick={() => onEntryClick(entry)}
+    >
+      <div className="font-bold text-[10px] leading-tight truncate text-surface-900">
+        {entry.unit_code}
+      </div>
+      {!compact && !tiny && (
+        <div className="text-[9px] leading-tight truncate text-surface-700">
+          {entry.group_name}
+        </div>
+      )}
+      {roomy && !tiny && (
+        <div className="text-[9px] leading-tight truncate text-surface-700">
+          {entry.tutor_name || 'Tutor TBA'}
+        </div>
+      )}
+      {!tiny && (
+        <div className="text-[9px] leading-tight truncate text-surface-600">
+          {entry.start_time?.substring(0, 5)}-{entry.end_time?.substring(0, 5)}
+        </div>
+      )}
+      {hasWarning && (
+        <div className="mt-0.5 flex items-center gap-1 rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold leading-tight text-amber-800">
+          <span aria-hidden="true">!</span>
+          <span className="truncate">Assign new tutor</span>
+        </div>
+      )}
+    </div>
+  );
+
+  return snapshot.isDragging && typeof document !== 'undefined'
+    ? createPortal(card, document.body)
+    : card;
+});
+
 export default function TimetableManager() {
   const [degrees, setDegrees] = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
@@ -189,9 +278,17 @@ export default function TimetableManager() {
   const [generatingCourse, setGeneratingCourse] = useState(null);
   const [enrolledStudents, setEnrolledStudents] = useState({});
   const [expandedMiniMaps, setExpandedMiniMaps] = useState({});
+  const [coursePanelOpen, setCoursePanelOpen] = useState(true);
+  const [isBoardDragging, setIsBoardDragging] = useState(false);
+  const [boardZoom, setBoardZoom] = useState(() => {
+    const saved = typeof window === 'undefined' ? NaN : Number(window.localStorage?.getItem(ZOOM_STORAGE_KEY));
+    return Number.isFinite(saved) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved)) : 1;
+  });
   const [focusedEntryId, setFocusedEntryId] = useState(null);
   const focusTimeoutRef = useRef(null);
   const selectedTrimesterRef = useRef('');
+  const boardShellRef = useRef(null);
+  const gridColumnCount = Math.max(classrooms.length * DAYS.length, 1);
 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -314,6 +411,34 @@ export default function TimetableManager() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    window.localStorage?.setItem(ZOOM_STORAGE_KEY, String(boardZoom));
+  }, [boardZoom]);
+
+  const calculateFitZoom = useCallback(() => {
+    const shell = boardShellRef.current;
+    if (!shell || gridColumnCount <= 0) return ZOOM_MIN;
+
+    const rect = shell.getBoundingClientRect();
+    const availableWidth = Math.max(320, rect.width - 18);
+    const availableHeight = Math.max(320, window.innerHeight - rect.top - 28);
+    const baseWidth = 96 + gridColumnCount * 92;
+    const baseHeight = SLOT_HEIGHT * (TIME_SLOTS.length + BOARD_HEADER_ROWS) + 8;
+    const fit = Math.min(availableWidth / baseWidth, availableHeight / baseHeight, ZOOM_MAX);
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(fit.toFixed(2))));
+  }, [gridColumnCount]);
+
+  const changeBoardZoom = useCallback((direction) => {
+    setBoardZoom(current => {
+      const next = direction === 'reset'
+        ? 1
+        : direction === 'fit'
+          ? calculateFitZoom()
+          : current + (direction === 'in' ? ZOOM_STEP : -ZOOM_STEP);
+      return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(next.toFixed(2))));
+    });
+  }, [calculateFitZoom]);
 
   const handleEnrolledStudentsChange = async (courseId, value) => {
     const numValue = parseInt(value) || 0;
@@ -560,7 +685,12 @@ export default function TimetableManager() {
     }
   };
 
-  const handleDragEnd = (result) => {
+  const handleDragStart = useCallback(() => {
+    setIsBoardDragging(true);
+  }, []);
+
+  const handleDragEnd = useCallback((result) => {
+    setIsBoardDragging(false);
     const { draggableId, destination } = result;
     if (!destination) return;
 
@@ -568,7 +698,7 @@ export default function TimetableManager() {
     if (!roomId || !timeSlot || !day || !DAYS.includes(day)) return;
 
     handleMoveClass(draggableId, day, timeSlot, roomId);
-  };
+  }, [handleMoveClass]);
 
   const handleEntryClick = (entry) => {
     setEditingEntry(entry);
@@ -664,12 +794,12 @@ export default function TimetableManager() {
     }
   };
 
-  const calculateCardStyle = (entry) => {
+  const calculateCardStyle = useCallback((entry) => {
     const startMinutes = timeToMinutes(entry.start_time);
     const endMinutes = timeToMinutes(entry.end_time);
     const durationSlots = (endMinutes - startMinutes) / 30;
-    return { height: durationSlots * SLOT_HEIGHT - 4 };
-  };
+    return { height: Math.max(18, durationSlots * SLOT_HEIGHT * boardZoom - 4) };
+  }, [boardZoom]);
 
   const scheduledEntriesById = useMemo(() => {
     return new Map(scheduledEntries.map(entry => [String(entry.id), entry]));
@@ -703,102 +833,120 @@ export default function TimetableManager() {
     }, new Map());
   }, [scheduledEntries]);
 
-  const getScheduledCountForCourse = (courseId) => {
+  const getScheduledCountForCourse = useCallback((courseId) => {
     return scheduledCountsByCourse.get(courseId) || 0;
-  };
+  }, [scheduledCountsByCourse]);
 
   const roomTypeLabel = (type) => type === 'lab' ? 'Lab' : 'Normal';
-  const gridColumnCount = Math.max(classrooms.length * DAYS.length, 1);
-  const boardGridTemplateColumns = `6rem repeat(${gridColumnCount}, minmax(5.75rem, 1fr))`;
-  const boardMinWidth = `${96 + gridColumnCount * 92}px`;
+  const timeColumnWidth = Math.round(96 * boardZoom);
+  const boardColumnWidth = Math.round(92 * boardZoom);
+  const slotHeight = Math.max(18, Math.round(SLOT_HEIGHT * boardZoom));
+  const boardGridTemplateColumns = `${timeColumnWidth}px repeat(${gridColumnCount}, minmax(${boardColumnWidth}px, 1fr))`;
+  const boardMinWidth = `${timeColumnWidth + gridColumnCount * boardColumnWidth}px`;
+  const boardZoomStyle = {
+    '--slot-height': `${slotHeight}px`,
+    '--board-zoom': boardZoom,
+    '--board-card-font': `${Math.max(8, 10 * boardZoom)}px`
+  };
+  const generatedCourses = useMemo(() => courses.filter(course => getScheduledCountForCourse(course.id) > 0).length, [courses, getScheduledCountForCourse]);
 
   return (
     <div className="min-h-screen">
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      <div className="page-header">
-        <div>
-          <p className="page-kicker">Scheduling board</p>
-          <h2 className="page-title" style={{ fontFamily: 'var(--font-heading)' }}>Timetable Scheduler</h2>
-          <p className="page-subtitle">Generate classes, validate conflicts, and arrange the selected teaching period board.</p>
-        </div>
-        <div className="flex gap-2">
-          {selectedTrimester ? (
-            <Link to={`/admin/timetable/routine/${selectedTrimester}`} className="btn btn-sm btn-primary">
-              View Routine
-            </Link>
-          ) : (
-            <button className="btn btn-sm btn-primary" disabled>
-              View Routine
+      <div className="timetable-workspace">
+        <div className="timetable-toolbar glass-card">
+          <div className="min-w-[12rem]">
+            <p className="page-kicker">Scheduling board</p>
+            <h2 className="text-xl font-black text-brand-dark leading-tight">Timetable Scheduler</h2>
+          </div>
+
+          <div className="timetable-toolbar-controls">
+            <label className="toolbar-field">
+              <span>Academic Year</span>
+              <select
+                className="form-select"
+                value={selectedAcademicYear}
+                onChange={e => setSelectedAcademicYear(e.target.value)}
+              >
+                <option value="">All Years</option>
+                {academicYears.map(year => (
+                  <option key={year.id} value={year.id}>{year.year}</option>
+                ))}
+              </select>
+            </label>
+            <label className="toolbar-field min-w-[15rem]">
+              <span>Degree</span>
+              <select
+                className="form-select"
+                value={selectedDegree}
+                onChange={e => setSelectedDegree(e.target.value)}
+              >
+                <option value="">All Degrees</option>
+                {degrees.map(d => (
+                  <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="toolbar-field min-w-[14rem]">
+              <span>Teaching Period</span>
+              <select
+                className="form-select"
+                value={selectedTrimester}
+                onChange={e => setSelectedTrimester(e.target.value)}
+              >
+                <option value="">Select teaching period...</option>
+                {teachingPeriodsForYear.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setCoursePanelOpen(value => !value)}
+              className="btn btn-sm btn-secondary"
+              aria-expanded={coursePanelOpen}
+            >
+              {coursePanelOpen ? 'Hide Courses' : 'Show Courses'}
             </button>
-          )}
-          <button
-            onClick={() => { loadCourses(); loadScheduledEntries(); }}
-            className="btn btn-sm btn-secondary"
-            disabled={loading}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      <div className="glass-card p-4 mb-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[9rem_minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div className="form-group">
-            <label className="form-label">Academic Year</label>
-            <select
-              className="form-select"
-              value={selectedAcademicYear}
-              onChange={e => setSelectedAcademicYear(e.target.value)}
+            <button
+              onClick={handleGenerateAll}
+              className="btn btn-sm btn-primary"
+              disabled={!selectedTrimester || generatingCourse === 'all' || loading || courses.length === 0}
             >
-              <option value="">All Years</option>
-              {academicYears.map(year => (
-                <option key={year.id} value={year.id}>{year.year}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Select Degree (Filter)</label>
-            <select
-              className="form-select"
-              value={selectedDegree}
-              onChange={e => setSelectedDegree(e.target.value)}
+              {generatingCourse === 'all' ? 'Generating...' : 'Generate All'}
+            </button>
+            {selectedTrimester ? (
+              <Link to={`/admin/timetable/routine/${selectedTrimester}`} className="btn btn-sm btn-secondary">
+                View Routine
+              </Link>
+            ) : (
+              <button className="btn btn-sm btn-secondary" disabled>
+                View Routine
+              </button>
+            )}
+            <button
+              onClick={() => { loadCourses(); loadScheduledEntries(); }}
+              className="btn btn-sm btn-secondary"
+              disabled={loading}
             >
-              <option value="">All Degrees</option>
-              {degrees.map(d => (
-                <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Teaching Period</label>
-            <select
-              className="form-select"
-              value={selectedTrimester}
-              onChange={e => setSelectedTrimester(e.target.value)}
-            >
-              <option value="">Select teaching period...</option>
-              {teachingPeriodsForYear.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+              Refresh
+            </button>
           </div>
         </div>
-      </div>
 
-      <>
-          <div className="flex flex-col gap-4 mb-6 xl:flex-row">
-            <div className="w-full xl:w-80 flex-shrink-0">
-              <div className="glass-card p-4">
+        <div className={`timetable-main ${coursePanelOpen ? 'has-course-panel' : 'course-panel-collapsed'}`}>
+          {coursePanelOpen && (
+            <aside className="timetable-course-panel glass-card">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-sm text-surface-900">Courses</h3>
-                  <button
-                    onClick={handleGenerateAll}
-                    className="btn btn-sm btn-primary"
-                    disabled={!selectedTrimester || generatingCourse === 'all' || loading || courses.length === 0}
-                  >
-                    {generatingCourse === 'all' ? 'Generating...' : 'Generate All'}
-                  </button>
+                  <div>
+                    <h3 className="font-semibold text-sm text-surface-900">Courses</h3>
+                    <p className="text-[11px] text-surface-500">{generatedCourses}/{courses.length} generated</p>
+                  </div>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => setCoursePanelOpen(false)}>Collapse</button>
                 </div>
 
                 {!selectedTrimester ? (
@@ -808,7 +956,7 @@ export default function TimetableManager() {
                 ) : courses.length === 0 ? (
                   <div className="text-center py-6 text-surface-500 text-sm">No courses for selected filters</div>
                 ) : (
-                  <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                  <div className="timetable-course-list liquid-scroll">
                     {courses.map(course => {
                       const scheduledCount = getScheduledCountForCourse(course.id);
                       const enrolled = getEnrolledStudents(course.id);
@@ -897,32 +1045,52 @@ export default function TimetableManager() {
                     })}
                   </div>
                 )}
-              </div>
-            </div>
+            </aside>
+          )}
 
-            <div className="flex-1 min-w-0 overflow-x-auto liquid-scroll">
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="glass-card timetable-dnd-board liquid-scroll max-h-[calc(100vh-260px)]">
+            <section className="timetable-board-shell" ref={boardShellRef}>
+              <div className="timetable-board-title">
+                <div>
+                  <h3 className="text-sm font-black text-brand-dark">Room timetable board</h3>
+                  <p className="text-xs text-surface-500">{classrooms.length} rooms, {DAYS.length} days, {scheduledEntries.length} scheduled classes</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="zoom-control" aria-label="Timetable board zoom controls">
+                    <button type="button" onClick={() => changeBoardZoom('out')} disabled={boardZoom <= ZOOM_MIN} aria-label="Zoom out">-</button>
+                    <span>{Math.round(boardZoom * 100)}%</span>
+                    <button type="button" onClick={() => changeBoardZoom('in')} disabled={boardZoom >= ZOOM_MAX} aria-label="Zoom in">+</button>
+                    <button type="button" className="zoom-fit" onClick={() => changeBoardZoom('fit')}>Fit Screen</button>
+                    <button type="button" className="zoom-reset" onClick={() => changeBoardZoom('reset')} disabled={boardZoom === 1}>Reset</button>
+                  </div>
+                  {!coursePanelOpen && (
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setCoursePanelOpen(true)}>Show Courses</button>
+                  )}
+                </div>
+              </div>
+
+              <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <div className={`glass-card timetable-dnd-board liquid-scroll ${isBoardDragging ? 'is-board-dragging' : ''}`} style={boardZoomStyle}>
                   {classrooms.length === 0 ? (
                     <div className="p-12 text-center text-surface-500">No available classrooms</div>
                   ) : (
                     <div style={{ minWidth: boardMinWidth }}>
                       <div
-                        className="grid sticky top-0 z-20 timetable-board-header"
+                        className="grid timetable-board-header"
                         style={{ gridTemplateColumns: boardGridTemplateColumns }}
                       >
-                        <div className="row-span-2 h-24 flex items-center justify-center border-b border-r border-white/70 font-black text-surface-800">
+                        <div className="timetable-corner-cell">
                           Time
                         </div>
 
                         {classrooms.map(room => (
                           <div
                             key={room.id}
-                            className={`h-12 flex items-center justify-center border-b border-r border-white/70 font-black text-surface-900 ${room.type === 'lab' ? 'bg-amber-50/80' : 'bg-blue-50/80'}`}
+                            className={`timetable-room-header ${room.type === 'lab' ? 'bg-amber-50/80' : 'bg-blue-50/80'}`}
                             style={{ gridColumn: `span ${DAYS.length} / span ${DAYS.length}` }}
+                            title={`${room.room_number} | ${roomTypeLabel(room.type)} room | Capacity ${room.max_capacity || 'N/A'}`}
                           >
-                            <span>{room.room_number}</span>
-                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${room.type === 'lab' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                            <span className="room-number-label">{room.room_number}</span>
+                            <span className={`room-type-pill ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${room.type === 'lab' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
                               {roomTypeLabel(room.type)}
                             </span>
                           </div>
@@ -932,26 +1100,24 @@ export default function TimetableManager() {
                           DAYS.map(day => (
                             <div
                               key={`${room.id}-${day}-header`}
-                              className="h-12 flex items-center justify-center border-b border-r border-white/70 bg-white/60 text-xs font-bold text-surface-700"
+                              className="timetable-day-header"
                               style={{ borderLeft: `3px solid ${DAY_COLORS[day]}` }}
+                              title={`${room.room_number} | ${day}`}
                             >
-                              {day.substring(0, 3)}
+                              {DAY_SHORT_LABELS[day] || day.substring(0, 3)}
                             </div>
                           ))
                         ))}
                       </div>
 
                       <div
-                        className="grid"
+                        className="grid timetable-grid-body"
                         style={{ gridTemplateColumns: boardGridTemplateColumns }}
                       >
                         {TIME_SLOTS.map((slot, slotIndex) => (
                           <Fragment key={slot}>
-                            <div className="timetable-time-cell">
+                            <div className="timetable-time-cell" title={`Start time ${slot}`}>
                               <span>{slot}</span>
-                              {slotIndex === TIME_SLOTS.length - 1 && (
-                                <span className="absolute -bottom-2 right-3 bg-white/85 pl-1">22:00</span>
-                              )}
                             </div>
 
                             {classrooms.map(room => {
@@ -969,61 +1135,29 @@ export default function TimetableManager() {
                                       <div
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        className={`timetable-drop-cell ${slotIndex % 2 === 0 ? 'bg-white/42' : 'bg-white/28'} ${snapshot.isDraggingOver ? 'is-over' : ''}`}
+                                        className={`timetable-drop-cell ${cellEntries.length > 0 ? 'has-entry' : ''} ${slotIndex % 2 === 0 ? 'bg-white/42' : 'bg-white/28'} ${snapshot.isDraggingOver ? 'is-over' : ''}`}
                                       >
                                         {cellEntries.map((entry, entryIndex) => {
                                           const { height } = calculateCardStyle(entry);
                                           const dayColor = DAY_COLORS[day] || '#6366f1';
                                           const hasTutorAvailabilityConflict = Boolean(entry.tutor_availability_conflict);
-                                          const conflictTitle = hasTutorAvailabilityConflict
-                                            ? 'Current tutor is no longer available at this time. Assign a new tutor or move the class.'
-                                            : undefined;
 
                                           return (
                                             <Draggable key={entry.id} draggableId={String(entry.id)} index={entryIndex}>
-                                              {(provided, snapshot) => {
-                                                const card = (
-                                                  <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.draggableProps}
-                                                    {...provided.dragHandleProps}
-                                                    id={`timetable-entry-${entry.id}`}
-                                                    className={`${snapshot.isDragging ? 'z-50 is-dragging' : 'absolute left-1 right-1 z-10'} timetable-entry-card ${hasTutorAvailabilityConflict ? 'has-warning border-amber-400 opacity-80 ring-2 ring-amber-400/35' : `${colors.border}`} ${String(focusedEntryId) === String(entry.id) ? 'timetable-focus-glow' : ''}`}
-                                                    title={conflictTitle}
-                                                    style={{
-                                                      height: `${height}px`,
-                                                      top: snapshot.isDragging ? undefined : '2px',
-                                                      borderLeft: `3px solid ${hasTutorAvailabilityConflict ? '#f59e0b' : dayColor}`,
-                                                      willChange: snapshot.isDragging ? 'transform' : undefined,
-                                                      ...provided.draggableProps.style
-                                                    }}
-                                                    onClick={() => handleEntryClick(entry)}
-                                                  >
-                                                    <div className="font-bold text-[10px] leading-tight truncate text-surface-900">
-                                                      {entry.unit_code}
-                                                    </div>
-                                                    <div className="text-[9px] leading-tight truncate text-surface-700">
-                                                      {entry.group_name}
-                                                    </div>
-                                                    <div className="text-[9px] leading-tight truncate text-surface-700">
-                                                      {entry.tutor_name || 'Tutor TBA'}
-                                                    </div>
-                                                    <div className="text-[9px] leading-tight truncate text-surface-600">
-                                                      {entry.start_time?.substring(0, 5)}-{entry.end_time?.substring(0, 5)}
-                                                    </div>
-                                                    {hasTutorAvailabilityConflict && (
-                                                      <div className="mt-0.5 flex items-center gap-1 rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold leading-tight text-amber-800">
-                                                        <span aria-hidden="true">!</span>
-                                                        <span className="truncate">Assign new tutor</span>
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                );
-
-                                                return snapshot.isDragging && typeof document !== 'undefined'
-                                                  ? createPortal(card, document.body)
-                                                  : card;
-                                              }}
+                                              {(provided, snapshot) => (
+                                                <TimetableEntryCard
+                                                  entry={entry}
+                                                  provided={provided}
+                                                  snapshot={snapshot}
+                                                  height={height}
+                                                  zoomLevel={boardZoom}
+                                                  dayColor={dayColor}
+                                                  focused={String(focusedEntryId) === String(entry.id)}
+                                                  hasWarning={hasTutorAvailabilityConflict}
+                                                  borderClass={colors.border}
+                                                  onEntryClick={handleEntryClick}
+                                                />
+                                              )}
                                             </Draggable>
                                           );
                                         })}
@@ -1041,9 +1175,9 @@ export default function TimetableManager() {
                   )}
                 </div>
               </DragDropContext>
-            </div>
+            </section>
           </div>
-        </>
+        </div>
 
       <Modal 
         isOpen={showScheduleModal} 
