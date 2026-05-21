@@ -142,7 +142,7 @@ export default function TutorManager() {
       setLoading(true);
       const [tRes, trRes] = await Promise.all([
         api.get('/tutors'),
-        api.get('/trimesters')
+        api.get('/trimesters?status=published')
       ]);
       setTutors(tRes.data);
       setTeachingPeriods(trRes.data);

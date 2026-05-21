@@ -68,7 +68,7 @@ export function AdminHome() {
       api.get('/courses'),
       api.get('/classrooms'),
       api.get('/tutors'),
-      api.get('/trimesters')
+      api.get('/trimesters?status=published')
     ])
       .then(([degreeRes, courseRes, classroomRes, tutorRes, trimesterRes]) => {
         if (!active) return;

@@ -29,7 +29,7 @@ async function viewTimetable(req, res) {
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
       JOIN trimesters tr ON te.trimester_id = tr.id
-      WHERE u.status = 'published' AND d.status = 'published'
+      WHERE u.status = 'published' AND d.status = 'published' AND tr.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -72,7 +72,9 @@ async function enroll(req, res) {
         (SELECT COUNT(*) FROM student_selections ss WHERE ss.timetable_entry_id = te.id) as enrolled_count
        FROM timetable_entries te
        JOIN classrooms c ON te.classroom_id = c.id
-       WHERE te.id = $1`,
+       JOIN trimesters tr ON te.trimester_id = tr.id
+       WHERE te.id = $1
+         AND tr.status = 'published'`,
       [timetable_entry_id]
     );
     if (entry.rows.length === 0) {
@@ -145,6 +147,7 @@ async function myClasses(req, res) {
        WHERE ss.user_id = $1
          AND u.status = 'published'
          AND d.status = 'published'
+         AND tr.status = 'published'
        GROUP BY ss.id, te.id, u.id, c.id, t.id, d.id, tr.id
        ORDER BY te.day_of_week, te.start_time`,
       [userId]

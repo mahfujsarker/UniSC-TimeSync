@@ -44,7 +44,7 @@ export default function CalendarManager() {
     let active = true;
     Promise.all([
       api.get('/calendar/published'),
-      api.get('/trimesters')
+      api.get('/trimesters?status=published')
     ])
       .then(([calendarRes, periodsRes]) => {
         if (!active) return;

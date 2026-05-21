@@ -252,7 +252,7 @@ async function checkAvailability(tutor_id, trimester_id, day_of_week, start_time
   await ensureTutorAvailabilitySchema();
   const result = await pool.query(
     `WITH selected_period AS (
-       SELECT id, academic_year_id FROM trimesters WHERE id = $2
+       SELECT id, academic_year_id FROM trimesters WHERE id = $2 AND status = 'published'
      ),
      day_rules AS (
        SELECT ta.*

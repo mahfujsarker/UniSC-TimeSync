@@ -81,6 +81,8 @@ async function ensureAcademicSchema() {
     ALTER TABLE units ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'published'
       CHECK (status IN ('draft', 'reviewed', 'published', 'archived'));
 
+    ALTER TABLE classes ADD COLUMN IF NOT EXISTS enrolled_students INTEGER DEFAULT 0;
+
     CREATE TABLE IF NOT EXISTS degree_course_imports (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       source_url TEXT NOT NULL,

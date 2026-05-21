@@ -40,7 +40,7 @@ async function getAll(req, res) {
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
       JOIN trimesters t ON c.trimester_id = t.id
-      WHERE u.status = 'published' AND d.status = 'published'
+      WHERE u.status = 'published' AND d.status = 'published' AND t.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -81,7 +81,7 @@ async function getById(req, res) {
        JOIN unit_degrees ud ON u.id = ud.unit_id
        JOIN degrees d ON ud.degree_id = d.id
        JOIN trimesters t ON c.trimester_id = t.id
-       WHERE c.id = $1 AND u.status = 'published' AND d.status = 'published'`,
+       WHERE c.id = $1 AND u.status = 'published' AND d.status = 'published' AND t.status = 'published'`,
       [id]
     );
     if (result.rows.length === 0) {
@@ -110,7 +110,8 @@ async function getByCourseAndTrimester(req, res) {
               (SELECT COUNT(*) FROM timetable_entries te WHERE te.class_id = c.id AND te.is_recurring = true) as is_scheduled
        FROM classes c
        JOIN units u ON c.unit_id = u.id
-       WHERE c.unit_id = $1 AND c.trimester_id = $2 AND u.status = 'published'
+       JOIN trimesters t ON c.trimester_id = t.id
+       WHERE c.unit_id = $1 AND c.trimester_id = $2 AND u.status = 'published' AND t.status = 'published'
        ORDER BY c.group_name`,
       [course_id, trimester_id]
     );
@@ -148,6 +149,7 @@ async function getUnscheduled(req, res) {
       )
         AND u.status = 'published'
         AND d.status = 'published'
+        AND t.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -181,6 +183,14 @@ async function createForCourse(req, res) {
       return res.status(400).json({ error: 'course_id and trimester_id are required' });
     }
 
+    const periodResult = await client.query(
+      "SELECT id FROM trimesters WHERE id = $1 AND status = 'published'",
+      [trimester_id]
+    );
+    if (periodResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Teaching period not found' });
+    }
+
     const courseResult = await client.query("SELECT * FROM units WHERE id = $1 AND status = 'published'", [course_id]);
     if (courseResult.rows.length === 0) {
       return res.status(404).json({ error: 'Course not found' });
@@ -202,11 +212,18 @@ async function createForCourse(req, res) {
 
     let createdClass;
     if (existingResult.rows.length > 0) {
-      await client.query(
-        `UPDATE classes SET required_room_type = $1, duration = $2, max_capacity = $3, enrolled_students = $4, updated_at = NOW() WHERE id = $5`,
+      const result = await client.query(
+        `UPDATE classes
+         SET required_room_type = $1,
+             duration = $2,
+             max_capacity = $3,
+             enrolled_students = $4,
+             updated_at = NOW()
+         WHERE id = $5
+         RETURNING *`,
         [roomType, classDuration, capacity, enrolled, existingResult.rows[0].id]
       );
-      createdClass = existingResult.rows[0];
+      createdClass = result.rows[0];
     } else {
       const result = await client.query(
         `INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, duration, max_capacity, enrolled_students)

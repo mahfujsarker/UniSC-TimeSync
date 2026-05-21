@@ -4,6 +4,7 @@
  * Enrolled student numbers entered per course before generating classes.
  */
 import { Fragment, memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+/* eslint-disable react-hooks/refs */
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
@@ -309,7 +310,7 @@ export default function TimetableManager() {
     Promise.all([
       api.get('/degrees'),
       api.get('/trimesters/academic-years'),
-      api.get('/trimesters'),
+      api.get('/trimesters?status=published'),
       api.get('/classrooms'),
       api.get('/tutors'),
     ]).then(([d, ay, tr, c, t]) => {
@@ -322,8 +323,10 @@ export default function TimetableManager() {
       if (d.data.length > 0) {
         setSelectedDegree(d.data[0].id);
       }
-      const publishedPeriods = tr.data.filter(period => period.status === 'published');
-      const initialYearId = ay.data[0]?.id || publishedPeriods[0]?.academic_year_id || '';
+      const publishedPeriods = tr.data;
+      const initialYearId = publishedPeriods[0]?.academic_year_id || ay.data.find(year =>
+        publishedPeriods.some(period => String(period.academic_year_id) === String(year.id))
+      )?.id || '';
       const initialPeriod = publishedPeriods.find(period => String(period.academic_year_id) === String(initialYearId)) || publishedPeriods[0];
       if (initialYearId) {
         setSelectedAcademicYear(initialYearId);
@@ -336,7 +339,6 @@ export default function TimetableManager() {
 
   const teachingPeriodsForYear = useMemo(() => {
     return trimesters.filter(period =>
-      period.status === 'published' &&
       (!selectedAcademicYear || String(period.academic_year_id) === String(selectedAcademicYear))
     );
   }, [trimesters, selectedAcademicYear]);
@@ -349,7 +351,10 @@ export default function TimetableManager() {
   }, [selectedAcademicYear, selectedTrimester, teachingPeriodsForYear]);
 
   const loadCourses = useCallback(async () => {
-    if (!selectedTrimester) return;
+    if (!selectedTrimester) {
+      setCourses([]);
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -475,6 +480,7 @@ export default function TimetableManager() {
       const numClasses = Math.ceil(enrolled / (course?.classroom_type === 'lab' ? 25 : 30));
 
       const createdClasses = [];
+      let scheduled = 0;
       for (let i = 0; i < numClasses; i++) {
         const letter = String.fromCharCode(65 + i);
         const groupName = `Group ${letter}`;
@@ -491,17 +497,19 @@ export default function TimetableManager() {
         const newClass = classRes.data;
         createdClasses.push(newClass);
 
-        const assigned = await autoScheduleClass(newClass, course);
+        const assigned = await autoScheduleClass(newClass, course, { showFailureToast: false });
         if (assigned) {
+          scheduled++;
           await loadScheduledEntries();
         }
       }
 
       setToast({
-        message: `${createdClasses.length} class(es) generated and scheduled`,
-        type: 'success'
+        message: `${createdClasses.length} class(es) generated, ${scheduled} scheduled`,
+        type: scheduled === createdClasses.length ? 'success' : 'warning'
       });
       loadCourses();
+      loadScheduledEntries();
     } catch (err) {
       setToast({ message: err.response?.data?.error || 'Failed to generate classes', type: 'error' });
     } finally {
@@ -509,7 +517,7 @@ export default function TimetableManager() {
     }
   };
 
-  const autoScheduleClass = async (cls, course) => {
+  const autoScheduleClass = async (cls, course, { showFailureToast = true } = {}) => {
     const requiredCapacity = cls.max_capacity || (course?.classroom_type === 'lab' ? 25 : 30);
     const suitableRooms = classrooms.filter(r =>
       r.type === (course?.classroom_type || 'normal') &&
@@ -518,15 +526,20 @@ export default function TimetableManager() {
     );
 
     if (suitableRooms.length === 0) {
-      setToast({ message: `No room with enough capacity for ${requiredCapacity} students`, type: 'warning' });
+      if (showFailureToast) {
+        setToast({ message: `No room with enough capacity for ${requiredCapacity} students`, type: 'warning' });
+      }
       return false;
     }
 
     if (tutors.length === 0) {
-      setToast({ message: 'No tutor available for auto-scheduling', type: 'warning' });
+      if (showFailureToast) {
+        setToast({ message: 'No tutor available for auto-scheduling', type: 'warning' });
+      }
       return false;
     }
 
+    let lastError = '';
     for (const room of suitableRooms) {
       for (const tutor of tutors) {
         for (const day of DAYS) {
@@ -563,7 +576,10 @@ export default function TimetableManager() {
                 });
                 return true;
               }
-            } catch {
+            } catch (err) {
+              lastError = err.response?.data?.errors?.[0]
+                || err.response?.data?.error
+                || lastError;
               continue;
             }
           }
@@ -571,7 +587,9 @@ export default function TimetableManager() {
       }
     }
 
-    setToast({ message: 'Could not auto-schedule. Please manually assign.', type: 'warning' });
+    if (showFailureToast) {
+      setToast({ message: lastError || 'Could not auto-schedule. Please manually assign.', type: 'warning' });
+    }
     return false;
   };
 
@@ -584,6 +602,7 @@ export default function TimetableManager() {
     setGeneratingCourse('all');
     try {
       let generated = 0;
+      let scheduled = 0;
 
       for (const course of courses) {
         const enrolled = getEnrolledStudents(course.id);
@@ -605,15 +624,19 @@ export default function TimetableManager() {
               max_capacity: course.classroom_type === 'lab' ? 25 : 30
             });
 
-            await autoScheduleClass(classRes.data, course);
+            const assigned = await autoScheduleClass(classRes.data, course, { showFailureToast: false });
             generated++;
+            if (assigned) scheduled++;
           } catch {
             continue;
           }
         }
       }
 
-      setToast({ message: `${generated} class(es) generated and scheduled`, type: 'success' });
+      setToast({
+        message: `${generated} class(es) generated, ${scheduled} scheduled`,
+        type: scheduled === generated ? 'success' : 'warning'
+      });
       loadCourses();
       loadScheduledEntries();
     } catch (err) {
@@ -623,8 +646,8 @@ export default function TimetableManager() {
     }
   };
 
-  const handleMoveClass = async (entryId, newDay, newStartTime, newRoomId = null) => {
-    const entry = scheduledEntriesById.get(entryId);
+  const handleMoveClass = useCallback(async (entryId, newDay, newStartTime, newRoomId = null) => {
+    const entry = scheduledEntries.find(item => String(item.id) === String(entryId));
     if (!entry) return;
 
     const originalDurationMinutes = timeToMinutes(entry.end_time) - timeToMinutes(entry.start_time);
@@ -683,7 +706,7 @@ export default function TimetableManager() {
       }
       loadScheduledEntries();
     }
-  };
+  }, [classrooms, loadScheduledEntries, scheduledEntries]);
 
   const handleDragStart = useCallback(() => {
     setIsBoardDragging(true);
@@ -801,10 +824,6 @@ export default function TimetableManager() {
     return { height: Math.max(18, durationSlots * SLOT_HEIGHT * boardZoom - 4) };
   }, [boardZoom]);
 
-  const scheduledEntriesById = useMemo(() => {
-    return new Map(scheduledEntries.map(entry => [String(entry.id), entry]));
-  }, [scheduledEntries]);
-
   const entriesByCell = useMemo(() => {
     const cells = new Map();
     scheduledEntries.forEach(entry => {
@@ -837,6 +856,10 @@ export default function TimetableManager() {
     return scheduledCountsByCourse.get(courseId) || 0;
   }, [scheduledCountsByCourse]);
 
+  const getGeneratedCountForCourse = useCallback((course) => {
+    return Number(course.classes_count ?? course.classes?.length ?? 0);
+  }, []);
+
   const roomTypeLabel = (type) => type === 'lab' ? 'Lab' : 'Normal';
   const timeColumnWidth = Math.round(96 * boardZoom);
   const boardColumnWidth = Math.round(92 * boardZoom);
@@ -847,6 +870,43 @@ export default function TimetableManager() {
     '--slot-height': `${slotHeight}px`,
     '--board-zoom': boardZoom,
     '--board-card-font': `${Math.max(8, 10 * boardZoom)}px`
+  };
+
+  const handleScheduleGeneratedClasses = async (course) => {
+    const existingClasses = Array.isArray(course.classes) ? course.classes : [];
+    const scheduledClassIds = new Set(
+      scheduledEntries
+        .filter(entry => String(entry.unit_id) === String(course.id))
+        .map(entry => String(entry.class_id))
+    );
+    const missingClasses = existingClasses
+      .filter(cls => !scheduledClassIds.has(String(cls.id)))
+      .map(cls => ({ ...cls, unit_id: course.id }));
+
+    if (missingClasses.length === 0) {
+      setToast({ message: 'All generated classes are already scheduled', type: 'success' });
+      return;
+    }
+
+    setGeneratingCourse(`schedule-${course.id}`);
+    try {
+      let scheduled = 0;
+      for (const cls of missingClasses) {
+        const assigned = await autoScheduleClass(cls, course, { showFailureToast: false });
+        if (assigned) scheduled++;
+      }
+
+      setToast({
+        message: `${scheduled}/${missingClasses.length} generated class(es) scheduled`,
+        type: scheduled === missingClasses.length ? 'success' : 'warning'
+      });
+      loadCourses();
+      loadScheduledEntries();
+    } catch (err) {
+      setToast({ message: err.response?.data?.error || 'Failed to schedule generated classes', type: 'error' });
+    } finally {
+      setGeneratingCourse(null);
+    }
   };
   const generatedCourses = useMemo(() => courses.filter(course => getScheduledCountForCourse(course.id) > 0).length, [courses, getScheduledCountForCourse]);
 
@@ -959,16 +1019,17 @@ export default function TimetableManager() {
                   <div className="timetable-course-list liquid-scroll">
                     {courses.map(course => {
                       const scheduledCount = getScheduledCountForCourse(course.id);
+                      const generatedCount = getGeneratedCountForCourse(course);
                       const enrolled = getEnrolledStudents(course.id);
                       const numClasses = Math.ceil(enrolled / (course.classroom_type === 'lab' ? 25 : 30));
-                      const hasClasses = scheduledCount > 0;
+                      const hasClassesOnBoard = scheduledCount > 0;
                       const courseScheduledEntries = scheduledEntriesByCourse.get(String(course.id)) || [];
                       const isMiniMapExpanded = !!expandedMiniMaps[course.id];
 
                       return (
                         <div
                           key={course.id}
-                          className={`rounded-xl border p-3 transition-all hover:border-brand-blue/40 hover:bg-white/80 ${hasClasses ? 'bg-white/60 border-white/80' : 'bg-white/45 border-white/60'}`}
+                          className={`rounded-xl border p-3 transition-all hover:border-brand-blue/40 hover:bg-white/80 ${hasClassesOnBoard ? 'bg-white/60 border-white/80' : 'bg-white/45 border-white/60'}`}
                         >
                           <div className="flex items-start justify-between mb-1">
                             <div>
@@ -981,15 +1042,17 @@ export default function TimetableManager() {
                           </div>
 
                           <div className="flex items-center gap-2 mb-2">
-                            <label className="text-[10px] text-surface-500">Enrolled:</label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="w-16 text-[10px] border border-white/70 bg-white/70 rounded-md px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                              placeholder="0"
-                              value={enrolled || ''}
-                              onChange={e => handleEnrolledStudentsChange(course.id, e.target.value)}
-                            />
+                            <label className="flex flex-col gap-1 text-[10px] text-surface-500">
+                              <span>Enrolled Students</span>
+                              <input
+                                type="number"
+                                min="0"
+                                className="w-20 text-[10px] border border-white/70 bg-white/70 rounded-md px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                                placeholder="0"
+                                value={enrolled || ''}
+                                onChange={e => handleEnrolledStudentsChange(course.id, e.target.value)}
+                              />
+                            </label>
                             {enrolled > 0 && (
                               <span className="text-[10px] text-surface-500">
                                 Est. classes: {numClasses}
@@ -997,13 +1060,13 @@ export default function TimetableManager() {
                             )}
                           </div>
 
-                          {hasClasses ? (
+                          {hasClassesOnBoard ? (
                             <>
                               <div className="flex items-center gap-2 text-sm text-success">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                                 </svg>
-                                <span>Generated ({scheduledCount} classes)</span>
+                                <span>Generated ({generatedCount} class{generatedCount === 1 ? '' : 'es'}, {scheduledCount} scheduled)</span>
                               </div>
 
                               <button
@@ -1030,6 +1093,17 @@ export default function TimetableManager() {
                                   onFocusEntry={focusEntryOnBoard}
                                 />
                               )}
+
+                              {generatedCount > scheduledCount && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleScheduleGeneratedClasses(course)}
+                                  className="btn btn-primary btn-sm mt-2 w-full"
+                                  disabled={!selectedTrimester || generatingCourse === `schedule-${course.id}`}
+                                >
+                                  {generatingCourse === `schedule-${course.id}` ? 'Scheduling...' : 'Auto Schedule Missing'}
+                                </button>
+                              )}
                             </>
                           ) : (
                             <button
@@ -1037,7 +1111,7 @@ export default function TimetableManager() {
                               className="btn btn-primary btn-sm w-full"
                               disabled={!selectedTrimester || generatingCourse === course.id || enrolled === 0}
                             >
-                              {generatingCourse === course.id ? 'Generating...' : 'Generate Course Class'}
+                              {generatingCourse === course.id ? 'Generating...' : 'Generate Class'}
                             </button>
                           )}
                         </div>

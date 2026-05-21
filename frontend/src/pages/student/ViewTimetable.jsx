@@ -17,7 +17,7 @@ export default function ViewTimetable() {
   useEffect(() => {
     Promise.all([
       api.get('/degrees'),
-      api.get('/trimesters')
+      api.get('/trimesters?status=published')
     ]).then(([dRes, tRes]) => {
       setDegrees(dRes.data);
       setTrimesters(tRes.data);

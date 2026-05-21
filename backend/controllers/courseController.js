@@ -76,7 +76,7 @@ async function getAll(req, res) {
         SELECT 1
         FROM trimesters tp
         JOIN unit_offering_patterns uop2 ON uop2.period_type = tp.type AND uop2.period_number = tp.period_number
-        WHERE tp.id = $${params.length} AND uop2.unit_id = u.id
+        WHERE tp.id = $${params.length} AND tp.status = 'published' AND uop2.unit_id = u.id
       )`);
     }
 

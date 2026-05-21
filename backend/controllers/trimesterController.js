@@ -37,6 +37,26 @@ async function upsertAcademicYear(client, { year, source_url = null, source_type
   return result.rows[0];
 }
 
+async function syncAcademicYearPublishedStatus(client, academicYearId) {
+  if (!academicYearId) return;
+
+  await client.query(
+    `UPDATE academic_years ay
+     SET status = CASE
+         WHEN EXISTS (
+           SELECT 1
+           FROM trimesters t
+           WHERE t.academic_year_id = ay.id
+             AND t.status = 'published'
+         ) THEN 'published'
+         ELSE 'draft'
+       END,
+       updated_at = NOW()
+     WHERE ay.id = $1`,
+    [academicYearId]
+  );
+}
+
 function normalizeCalendarText(html) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -369,6 +389,7 @@ async function create(req, res) {
 }
 
 async function update(req, res) {
+  const client = await pool.connect();
   try {
     await ensureAcademicSchema();
     const { id } = req.params;
@@ -378,7 +399,14 @@ async function update(req, res) {
       exam_start_date, exam_end_date, grades_release_date, source_url, status
     } = req.body;
     const periodType = type ? normalizeType(type) : null;
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const current = await client.query(
+      'SELECT academic_year_id FROM trimesters WHERE id = $1',
+      [id]
+    );
+
+    const result = await client.query(
       `UPDATE trimesters SET 
         name = COALESCE($1, name),
         start_date = COALESCE($2, start_date),
@@ -407,33 +435,72 @@ async function update(req, res) {
       ]
     );
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Trimester not found' });
     }
+
+    const affectedYearIds = new Set([
+      current.rows[0]?.academic_year_id,
+      result.rows[0].academic_year_id
+    ].filter(Boolean));
+
+    for (const yearId of affectedYearIds) {
+      await syncAcademicYearPublishedStatus(client, yearId);
+    }
+
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error updating trimester:', err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 }
 
 async function remove(req, res) {
+  const client = await pool.connect();
   try {
     await ensureAcademicSchema();
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM trimesters WHERE id = $1 RETURNING *', [id]);
+
+    await client.query('BEGIN');
+    const result = await client.query('DELETE FROM trimesters WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Trimester not found' });
     }
+
+    await syncAcademicYearPublishedStatus(client, result.rows[0].academic_year_id);
+    await client.query('COMMIT');
     res.json({ message: 'Trimester deleted successfully' });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error deleting trimester:', err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 }
 
 async function getAcademicYears(req, res) {
   try {
     await ensureAcademicSchema();
+    await pool.query(`
+      UPDATE academic_years ay
+      SET status = CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM trimesters t
+            WHERE t.academic_year_id = ay.id
+              AND t.status = 'published'
+          ) THEN 'published'
+          WHEN ay.status = 'published' THEN 'draft'
+          ELSE ay.status
+        END,
+        updated_at = NOW()
+    `);
     const result = await pool.query('SELECT * FROM academic_years ORDER BY year DESC');
     res.json(result.rows);
   } catch (err) {

@@ -32,6 +32,7 @@ async function getAll(req, res) {
             LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
             LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
             WHERE ta.tutor_id = t.id
+              AND (ta.trimester_id IS NULL OR tr.status = 'published')
           ),
           '[]'::jsonb
         ) as availability
@@ -73,6 +74,7 @@ async function getById(req, res) {
             LEFT JOIN academic_years ay ON ta.academic_year_id = ay.id
             LEFT JOIN trimesters tr ON ta.trimester_id = tr.id
             WHERE ta.tutor_id = t.id
+              AND (ta.trimester_id IS NULL OR tr.status = 'published')
           ),
           '[]'::jsonb
         ) as availability

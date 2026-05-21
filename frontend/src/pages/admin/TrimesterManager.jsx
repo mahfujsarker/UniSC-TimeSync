@@ -275,27 +275,30 @@ export default function TrimesterManager() {
                     <input type="checkbox" checked={selectedIds.includes(period.id)} onChange={() => toggleSelected(period.id)} />
                   </td>
                   <td>{period.academic_year || '-'}</td>
-                  {fields.map(([key]) => (
+                  {fields.map(([key, label]) => (
                     <td key={key}>
-                      {key === 'type' ? (
-                        <select className="form-select min-w-32" value={period.type || 'TRIMESTER'} onChange={e => updatePeriodField(period.id, key, e.target.value)}>
-                          <option value="TRIMESTER">Trimester</option>
-                          <option value="SESSION">Session</option>
-                          <option value="SEMESTER">Semester</option>
-                          <option value="OTHER">Other</option>
-                        </select>
-                      ) : key === 'status' ? (
-                        <select className="form-select min-w-28" value={period.status || 'draft'} onChange={e => updatePeriodField(period.id, key, e.target.value)}>
-                          <option value="draft">draft</option>
-                          <option value="reviewed">reviewed</option>
-                          <option value="published">published</option>
-                          <option value="archived">archived</option>
-                        </select>
-                      ) : key.includes('date') || key === 'start_date' || key === 'end_date' ? (
-                        <input className="form-input min-w-36" type="date" value={period[key]?.slice(0, 10) || ''} onChange={e => updatePeriodField(period.id, key, e.target.value)} />
-                      ) : (
-                        <input className="form-input min-w-32" value={period[key] || ''} onChange={e => updatePeriodField(period.id, key, e.target.value)} />
-                      )}
+                      <label className="flex min-w-max flex-col gap-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-surface-500">{label}</span>
+                        {key === 'type' ? (
+                          <select className="form-select min-w-32" value={period.type || 'TRIMESTER'} onChange={e => updatePeriodField(period.id, key, e.target.value)}>
+                            <option value="TRIMESTER">Trimester</option>
+                            <option value="SESSION">Session</option>
+                            <option value="SEMESTER">Semester</option>
+                            <option value="OTHER">Other</option>
+                          </select>
+                        ) : key === 'status' ? (
+                          <select className="form-select min-w-28" value={period.status || 'draft'} onChange={e => updatePeriodField(period.id, key, e.target.value)}>
+                            <option value="draft">draft</option>
+                            <option value="reviewed">reviewed</option>
+                            <option value="published">published</option>
+                            <option value="archived">archived</option>
+                          </select>
+                        ) : key.includes('date') || key === 'start_date' || key === 'end_date' ? (
+                          <input className="form-input min-w-36" type="date" value={period[key]?.slice(0, 10) || ''} onChange={e => updatePeriodField(period.id, key, e.target.value)} />
+                        ) : (
+                          <input className="form-input min-w-32" value={period[key] || ''} onChange={e => updatePeriodField(period.id, key, e.target.value)} />
+                        )}
+                      </label>
                     </td>
                   ))}
                   <td>

@@ -18,7 +18,7 @@ export default function DownloadTimetable() {
   useEffect(() => {
     let active = true;
 
-    api.get('/trimesters')
+    api.get('/trimesters?status=published')
       .then(async res => {
         if (!active) return;
         setTrimesters(res.data);

@@ -259,7 +259,7 @@ async function getAll(req, res) {
       JOIN trimesters tr ON te.trimester_id = tr.id
       JOIN unit_degrees ud ON u.id = ud.unit_id
       JOIN degrees d ON ud.degree_id = d.id
-      WHERE u.status = 'published' AND d.status = 'published'
+      WHERE u.status = 'published' AND d.status = 'published' AND tr.status = 'published'
     `;
     const params = [];
     let paramIdx = 1;
@@ -307,10 +307,12 @@ async function getKanban(req, res) {
       JOIN classes cl ON te.class_id = cl.id
       JOIN classrooms c ON te.classroom_id = c.id
       JOIN tutors t ON te.tutor_id = t.id
+      JOIN trimesters tr ON te.trimester_id = tr.id
       JOIN degrees d ON ud.degree_id = d.id
       WHERE te.trimester_id = $1
         AND u.status = 'published'
-        AND d.status = 'published'`;
+        AND d.status = 'published'
+        AND tr.status = 'published'`;
     const params = [trimesterId];
     let paramIdx = 2;
 
@@ -347,9 +349,10 @@ async function getKanban(req, res) {
 async function getGrid(req, res) {
   try {
     await ensureAcademicSchema();
-    const { trimesterId, classroom_id, day_of_week } = req.query;
+    const { trimesterId } = req.params;
+    const { classroom_id, day_of_week } = req.query;
     
-    const trimResult = await pool.query('SELECT * FROM trimesters WHERE id = $1', [trimesterId]);
+    const trimResult = await pool.query("SELECT * FROM trimesters WHERE id = $1 AND status = 'published'", [trimesterId]);
     if (trimResult.rows.length === 0) {
       return res.status(404).json({ error: 'Trimester not found' });
     }
@@ -374,8 +377,10 @@ async function getGrid(req, res) {
       JOIN units u ON te.unit_id = u.id
       JOIN classes cl ON te.class_id = cl.id
       JOIN tutors t ON te.tutor_id = t.id
+      JOIN trimesters tr ON te.trimester_id = tr.id
       WHERE te.trimester_id = $1
         AND u.status = 'published'
+        AND tr.status = 'published'
     `;
     const entryParams = [trimesterId];
 
@@ -414,24 +419,41 @@ function generateTimeSlots() {
 
 async function validateEntry(req, res) {
   try {
-    const { class_id, classroom_id, tutor_id, day_of_week, start_time, end_time, exclude_id } = req.body;
+    const { class_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, exclude_id } = req.body;
     
     const timeErrors = validateTimeRange(start_time, end_time);
     if (timeErrors.length > 0) {
       return res.status(400).json({ valid: false, errors: timeErrors });
     }
 
+    if (trimester_id) {
+      const periodResult = await pool.query(
+        "SELECT id FROM trimesters WHERE id = $1 AND status = 'published'",
+        [trimester_id]
+      );
+      if (periodResult.rows.length === 0) {
+        return res.status(404).json({ valid: false, errors: ['Teaching period not found'] });
+      }
+    }
+
     if (class_id) {
       const classResult = await pool.query(
-        'SELECT * FROM classes WHERE id = $1',
-        [class_id]
+        `SELECT cl.*
+         FROM classes cl
+         JOIN trimesters tr ON cl.trimester_id = tr.id
+         WHERE cl.id = $1
+           AND tr.status = 'published'
+           AND ($2::uuid IS NULL OR cl.trimester_id = $2)`,
+        [class_id, trimester_id || null]
       );
-      if (classResult.rows.length > 0) {
-        const cls = classResult.rows[0];
-        const roomValidation = await validateRoomSuitability(classroom_id, cls);
-        if (!roomValidation.valid) {
-          return res.status(400).json({ valid: false, errors: [roomValidation.message] });
-        }
+      if (classResult.rows.length === 0) {
+        return res.status(404).json({ valid: false, errors: ['Class not found'] });
+      }
+
+      const cls = classResult.rows[0];
+      const roomValidation = await validateRoomSuitability(classroom_id, cls);
+      if (!roomValidation.valid) {
+        return res.status(400).json({ valid: false, errors: [roomValidation.message] });
       }
     }
 
@@ -475,8 +497,12 @@ async function create(req, res) {
       `SELECT cl.*
        FROM classes cl
        JOIN units u ON cl.unit_id = u.id
-       WHERE cl.id = $1 AND u.status = 'published'`,
-      [class_id]
+       JOIN trimesters tr ON cl.trimester_id = tr.id
+       WHERE cl.id = $1
+         AND cl.trimester_id = $2
+         AND u.status = 'published'
+         AND tr.status = 'published'`,
+      [class_id, trimester_id]
     );
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
@@ -543,8 +569,29 @@ async function update(req, res) {
     }
 
     let classForValidation = entry;
+    if (newTrimester) {
+      const periodResult = await pool.query(
+        "SELECT id FROM trimesters WHERE id = $1 AND status = 'published'",
+        [newTrimester]
+      );
+      if (periodResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Teaching period not found' });
+      }
+    }
+
+    const classPeriodResult = await pool.query(
+      'SELECT id FROM classes WHERE id = $1 AND trimester_id = $2',
+      [newClass, newTrimester]
+    );
+    if (classPeriodResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Class does not belong to the selected teaching period' });
+    }
+
     if (class_id && class_id !== entry.class_id) {
-      const classResult = await pool.query('SELECT * FROM classes WHERE id = $1', [class_id]);
+      const classResult = await pool.query(
+        'SELECT * FROM classes WHERE id = $1 AND trimester_id = $2',
+        [class_id, newTrimester]
+      );
       if (classResult.rows.length === 0) {
         return res.status(404).json({ error: 'Class not found' });
       }
@@ -636,8 +683,12 @@ async function scheduleClass(req, res) {
       `SELECT cl.*
        FROM classes cl
        JOIN units u ON cl.unit_id = u.id
-       WHERE cl.id = $1 AND u.status = 'published'`,
-      [class_id]
+       JOIN trimesters tr ON cl.trimester_id = tr.id
+       WHERE cl.id = $1
+         AND cl.trimester_id = $2
+         AND u.status = 'published'
+         AND tr.status = 'published'`,
+      [class_id, trimester_id]
     );
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
