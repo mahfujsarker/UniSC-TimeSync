@@ -1,6 +1,7 @@
 /**
- * Trimester Controller
- * CRUD operations for trimesters/sessions.
+ * Teaching Period Controller
+ * Manages academic years plus trimester/session/semester records.
+ * Also imports UniSC calendar pages into draft teaching periods for review.
  */
 const pool = require('../config/db');
 const { ensureAcademicSchema } = require('../utils/academicSchema');
@@ -58,6 +59,8 @@ async function syncAcademicYearPublishedStatus(client, academicYearId) {
 }
 
 function normalizeCalendarText(html) {
+  // Calendar pages are mostly HTML tables/lists. Normalize markup into simple
+  // line-based text so the parser can find period headers and date labels.
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -259,6 +262,8 @@ function inferContextFromRange(startDate, endDate) {
 }
 
 function parseTeachingPeriodsFromHtml(html, year, sourceUrl) {
+  // Import is intentionally conservative: extracted periods stay in draft
+  // status until an admin reviews dates and publishes them.
   const lines = getCalendarLines(html);
   const sections = buildPeriodSections(lines, year);
   const periods = [];

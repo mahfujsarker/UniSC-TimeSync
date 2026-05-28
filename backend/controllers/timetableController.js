@@ -11,6 +11,9 @@ const {
 } = require('./tutorAvailabilityController');
 
 async function checkConflicts(classroom_id, tutor_id, class_id, trimester_id, day_of_week, start_time, end_time, excludeId = null) {
+  // A valid timetable entry must not overlap the same room, tutor, or class
+  // group in the same teaching period. Time overlap uses half-open intervals:
+  // existing.start < new.end AND existing.end > new.start.
   const conflicts = [];
   
   if (!classroom_id || !day_of_week || !start_time || !end_time) {
@@ -221,6 +224,8 @@ async function getAll(req, res) {
         tr.name as trimester_name,
         cl.group_name, cl.required_room_type, cl.duration as class_duration,
         CASE
+          -- Surface warnings for entries that remain scheduled after tutor
+          -- availability changes. The UI uses this flag to highlight cards.
           WHEN EXISTS (
             SELECT 1 FROM tutor_availability ta
             WHERE ta.tutor_id = te.tutor_id
@@ -712,6 +717,8 @@ async function scheduleClass(req, res) {
 
     const entries = [];
     if (create_recurring) {
+      // Recurring schedules represent the normal weekly class. Replacing the
+      // previous recurring row keeps one canonical entry per generated class.
       const existingRecurring = await client.query(
         'SELECT id FROM timetable_entries WHERE class_id = $1 AND is_recurring = true',
         [class_id]

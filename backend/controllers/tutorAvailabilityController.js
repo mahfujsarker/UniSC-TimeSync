@@ -9,6 +9,10 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const SCOPES = ['YEAR', 'PERIOD', 'DAY'];
 
 async function ensureTutorAvailabilitySchema() {
+  // Availability supports three scopes:
+  // YEAR covers all published periods in an academic year,
+  // PERIOD covers every weekday in one teaching period,
+  // DAY narrows availability to a weekday and optional time range.
   await ensureAcademicSchema();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tutor_availability (
@@ -250,6 +254,8 @@ async function remove(req, res) {
 
 async function checkAvailability(tutor_id, trimester_id, day_of_week, start_time, end_time) {
   await ensureTutorAvailabilitySchema();
+  // DAY rules take priority because they are the most specific. If no DAY
+  // rules exist, PERIOD then YEAR rules can satisfy the booking.
   const result = await pool.query(
     `WITH selected_period AS (
        SELECT id, academic_year_id FROM trimesters WHERE id = $2 AND status = 'published'
@@ -304,6 +310,8 @@ async function replaceForTutor(req, res) {
     }
 
     const rows = [];
+    // The frontend sends nested year/period/day selections. Flatten them into
+    // normalized rows so conflict checks can query one table efficiently.
     for (const yearId of year_availability) {
       const academicYear = await client.query(
         `SELECT id FROM academic_years WHERE id = $1 AND status = 'published'`,

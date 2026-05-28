@@ -13,7 +13,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore user from localStorage on mount
+    // Restore the last signed-in user so protected routes can render after a
+    // browser refresh. The API interceptor still validates tokens on requests.
     const savedUser = localStorage.getItem('user');
     const token = localStorage.getItem('accessToken');
     if (savedUser && token) {
@@ -24,6 +25,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
+    // Store both tokens and the display user record after a successful login.
+    // Route guards read `user`; API calls read the access token.
     const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
@@ -45,7 +48,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/auth/logout');
     } catch {
-      // Ignore errors — user should still be logged out locally
+      // Ignore API errors; the user should still be logged out locally.
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

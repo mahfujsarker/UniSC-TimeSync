@@ -1,6 +1,6 @@
 /**
- * TTMS Backend Server
- * University Time Table Management System
+ * UniSC TimeSync Backend Server
+ * Timetable Management System
  * 
  * Express.js server with PostgreSQL, JWT auth, and RESTful APIs.
  */
@@ -53,7 +53,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    service: 'TTMS Backend'
+    service: 'UniSC TimeSync Backend'
   });
 });
 
@@ -77,7 +77,7 @@ app.use((req, res) => {
 // Start server
 // ============================================
 app.listen(PORT, () => {
-  console.log(`\n🚀 TTMS Backend running on http://localhost:${PORT}`);
+  console.log(`\n🚀 UniSC TimeSync Backend running on http://localhost:${PORT}`);
   console.log(`📋 API endpoints available at http://localhost:${PORT}/api`);
   console.log(`🔒 Environment: ${process.env.NODE_ENV || 'development'}\n`);
 });

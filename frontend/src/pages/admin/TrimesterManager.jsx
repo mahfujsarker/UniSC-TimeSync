@@ -1,3 +1,8 @@
+/**
+ * Teaching Period Manager
+ * Imports UniSC calendar pages into draft teaching periods, lets admins review
+ * dates inline, and publishes only the approved records.
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/axios';
 import Toast from '../../components/Toast';
@@ -23,6 +28,7 @@ const emptyPeriod = {
 };
 
 const fields = [
+  // Editable table fields shown for each imported or manually-created period.
   ['name', 'Teaching period name'],
   ['type', 'Type'],
   ['code', 'Code'],
@@ -87,6 +93,8 @@ export default function TrimesterManager() {
   const visiblePeriods = periods.filter(period => !selectedYearId || String(period.academic_year_id) === String(selectedYearId));
 
   const importCalendar = async (event) => {
+    // Import creates draft periods and selects them for review. Admins can
+    // adjust dates before publishing.
     event.preventDefault();
     setImporting(true);
     try {

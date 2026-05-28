@@ -76,7 +76,7 @@ export default function Register() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="reg-email">Email</label>
-              <input id="reg-email" name="email" type="email" className="form-input" placeholder="you@university.edu" value={form.email} onChange={handleChange} required />
+              <input id="reg-email" name="email" type="email" className="form-input" placeholder="student.timesync@usc.edu.au" value={form.email} onChange={handleChange} required />
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="reg-pass">Password</label>

@@ -1,6 +1,6 @@
 -- ============================================
--- TTMS Database Schema
--- University Time Table Management System
+-- UniSC TimeSync Database Schema
+-- Timetable Management System
 -- ============================================
 
 -- Enable UUID extension

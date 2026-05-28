@@ -11,7 +11,16 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor — attach access token
+function clearAuthAndRedirect() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
+// Request interceptor: attach access token.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
@@ -20,13 +29,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor — handle token refresh
+// Response interceptor: handle token refresh and stale local tokens.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && 
+    if (error.response?.status === 401 &&
         error.response?.data?.code === 'TOKEN_EXPIRED' &&
         !originalRequest._retry) {
       originalRequest._retry = true;
@@ -34,20 +43,23 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refreshToken });
-        
+
         localStorage.setItem('accessToken', data.accessToken);
         localStorage.setItem('refreshToken', data.refreshToken);
-        
+
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed — clear tokens and redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        clearAuthAndRedirect();
         return Promise.reject(refreshError);
       }
+    }
+
+    const hasStoredToken = Boolean(localStorage.getItem('accessToken'));
+    const invalidToken = error.response?.status === 403 && error.response?.data?.error === 'Invalid token';
+    const rejectedStoredToken = error.response?.status === 401 && hasStoredToken;
+    if (invalidToken || rejectedStoredToken) {
+      clearAuthAndRedirect();
     }
 
     return Promise.reject(error);

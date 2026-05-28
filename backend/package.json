@@ -1,12 +1,13 @@
 {
-  "name": "ttms-backend",
+  "name": "timesync-backend",
   "version": "1.0.0",
-  "description": "University Time Table Management System - Backend",
+  "description": "UniSC TimeSync backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "db:init": "node db/init-db.js",
+    "db:seed": "node db/init-db.js --seed",
     "test": "node --test tests/api.test.js"
   },
   "dependencies": {

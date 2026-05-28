@@ -34,6 +34,8 @@ const emptyCourse = {
 };
 
 const offeringOptions = [
+  // Offering patterns describe when a course is normally available. The
+  // scheduler uses them to show only courses offered in the selected period.
   { group: 'Trimesters', options: [1, 2, 3].map(n => ({ label: `Trimester ${n}`, period_type: 'TRIMESTER', period_number: n, code: `T${n}` })) },
   { group: 'Semesters', options: [1, 2].map(n => ({ label: `Semester ${n}`, period_type: 'SEMESTER', period_number: n, code: `SEM${n}` })) },
   { group: 'Sessions', options: Array.from({ length: 8 }, (_, i) => {
@@ -134,6 +136,8 @@ export default function DegreeManager() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const coursesByDegree = useMemo(() => {
+    // Courses can belong to multiple degrees, so build a degree -> courses map
+    // for the expandable academic-structure view.
     const map = new Map(degrees.map(degree => [degree.id, []]));
     courses.forEach(course => {
       (course.degrees || []).forEach(degree => {
@@ -289,6 +293,8 @@ export default function DegreeManager() {
   };
 
   const extractImport = async event => {
+    // URL imports are staged as editable drafts. Nothing is written to live
+    // degree/course records until the admin approves and publishes.
     event.preventDefault();
     setImportError('');
     setImportDraft(null);

@@ -16,6 +16,8 @@ function normalizeStatus(status, fallback = 'published') {
 }
 
 function normalizeOfferingPatterns(patterns = []) {
+  // Deduplicate and validate period rules before saving. This protects the
+  // scheduler from invalid combinations such as Session 99.
   return [...new Map(patterns
     .filter(pattern => pattern && pattern.period_type && pattern.period_number)
     .map(pattern => {
@@ -32,6 +34,8 @@ function normalizeOfferingPatterns(patterns = []) {
 }
 
 async function replaceOfferingPatterns(client, unitId, patterns) {
+  // Offering patterns are authoritative per course, so updates replace the
+  // whole set instead of trying to diff individual checkboxes.
   await client.query('DELETE FROM unit_offering_patterns WHERE unit_id = $1', [unitId]);
   for (const pattern of normalizeOfferingPatterns(patterns)) {
     await client.query(
@@ -161,6 +165,8 @@ async function getByDegreeAndTrimester(req, res) {
       return res.status(400).json({ error: 'trimester_id is required' });
     }
     
+    // Match courses to a teaching period by type/number, not by a single
+    // concrete trimester id, so the same course can recur each year.
     let query = `
       SELECT u.*,
              COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', d.id, 'code', d.code, 'name', d.name)) FILTER (WHERE d.id IS NOT NULL), '[]') as degrees,

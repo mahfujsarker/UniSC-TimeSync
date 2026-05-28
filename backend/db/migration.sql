@@ -1,5 +1,5 @@
 -- ============================================
--- TTMS Database Migration
+-- UniSC TimeSync Database Migration
 -- Adds tutor_availability table and enrolled_students column
 -- ============================================
 

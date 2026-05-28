@@ -81,13 +81,13 @@ async function enroll(req, res) {
       return res.status(404).json({ error: 'Timetable entry not found' });
     }
 
-    // Check capacity
+    // Enrolment is capped by the scheduled classroom's capacity.
     const slot = entry.rows[0];
     if (slot.enrolled_count >= slot.max_capacity) {
-      return res.status(409).json({ error: 'Class is full — no spots available' });
+      return res.status(409).json({ error: 'Class is full - no spots available' });
     }
 
-    // Check for student time conflict
+    // Students cannot enrol in two classes whose times overlap on the same day.
     const conflict = await pool.query(
       `SELECT te.*, u.name as unit_name
        FROM student_selections ss

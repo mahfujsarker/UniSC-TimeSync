@@ -1,136 +1,259 @@
-# TTMS — University Time Table Management System
+# UniSC TimeSync - Timetable Management System
 
-A full-stack web application for managing university timetables with **Kanban-style drag-and-drop** interface.
+UniSC TimeSync is a full-stack timetable management application for planning, publishing, viewing, and selecting university classes. It supports administrator workflows for academic structure, teaching periods, rooms, tutors, class generation, and timetable scheduling, plus student workflows for timetable viewing and class enrolment.
 
-## 🔧 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 19, Vite, TailwindCSS v4, @hello-pangea/dnd |
-| **Backend** | Node.js, Express.js |
-| **Database** | PostgreSQL |
-| **Auth** | JWT (access + refresh tokens), bcrypt |
-
-## 📁 Project Structure
-
-```
-ttms/
-├── backend/           # Express API server
-│   ├── config/        # Database connection
-│   ├── controllers/   # Business logic (auth, CRUD, timetable, student)
-│   ├── middleware/     # JWT auth & role-based access
-│   ├── routes/        # API route definitions
-│   ├── db/            # SQL schema + seed data
-│   └── server.js      # Entry point
-├── frontend/          # React SPA
-│   └── src/
-│       ├── api/       # Axios with JWT interceptor
-│       ├── context/   # Auth state management
-│       ├── components/# Shared UI (KanbanBoard, Modal, Toast, etc.)
-│       └── pages/     # Admin + Student dashboards
-└── README.md
-```
-
-## 🚀 Setup & Running
-
-### Prerequisites
-
-- **Node.js** v18+
-- **PostgreSQL** v14+
-
-### 1. Database Setup
-
-```bash
-# Create the database
-psql -U postgres -c "CREATE DATABASE ttms_db;"
-
-# Initialize tables
-cd ttms/backend
-npm install
-node db/init-db.js
-
-# (Optional) Seed with sample data
-node db/init-db.js --seed
-```
-
-### 2. Backend
-
-```bash
-cd ttms/backend
-
-# Configure environment (edit .env if needed)
-# Default: localhost:5432, postgres/postgres, ttms_db
-
-npm install
-npm run dev
-# Server starts on http://localhost:5000
-```
-
-### 3. Frontend
-
-```bash
-cd ttms/frontend
-npm install
-npm run dev
-# App opens at http://localhost:5173
-```
-
-## 👤 User Roles
+## Current Features
 
 ### Admin
-- Full CRUD for: Degrees, Trimesters, Units, Classrooms, Tutors, Calendar
-- **Kanban timetable board** with drag-and-drop to assign/move classes
-- Automatic **conflict detection** (room + tutor availability)
+
+- Live dashboard with counts for degrees, courses, rooms, tutors, teaching periods, scheduled classes, room usage, and tutor workload.
+- Degree and course management in one screen.
+- UniSC degree/course URL import workflow with draft review before publishing.
+- Academic year and teaching period management.
+- UniSC academic calendar import, draft review, and publish workflow.
+- Classroom CRUD with capacity, room type, and availability status.
+- Tutor CRUD with availability by academic year, teaching period, weekday, and time.
+- Class generation from enrolled student counts and room capacity.
+- Room-based timetable scheduler with drag-and-drop placement.
+- Auto scheduling for missing generated classes.
+- Conflict checks for classroom bookings, tutor bookings, room type, duration, capacity, and tutor availability.
+- Routine timetable view and export pages.
+- Public read-only timetable page at `/view-only-timetable`.
 
 ### Student
-- View published timetable (read-only Kanban board)
-- Browse and **enroll in classes** with capacity checks
-- View **My Classes** schedule grouped by day
-- Drop classes with unenroll
 
-## 🔑 Demo Credentials
+- Student dashboard.
+- Published timetable viewing.
+- Class selection and enrolment.
+- Personal class list with unenrol support.
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@ttms.edu | admin123 |
-| Student | student@ttms.edu | student123 |
+## Tech Stack
 
-> ⚠️ Run `node db/init-db.js --seed` to create demo users.
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 19, Vite 8, React Router 7, Tailwind CSS 4 |
+| UI interaction | @hello-pangea/dnd |
+| API client | Axios with JWT token interceptor |
+| Backend | Node.js, Express 4 |
+| Database | PostgreSQL |
+| Auth | JWT access/refresh tokens, bcryptjs |
 
-## 📡 API Endpoints
+## Project Structure
 
-| Resource | Methods | Auth |
-|---|---|---|
-| `/api/auth/register, login, refresh, logout` | POST | Public (register/login) |
-| `/api/degrees` | GET, POST, PUT, DELETE | Admin (write) |  
-| `/api/trimesters` | GET, POST, PUT, DELETE | Admin (write) |
-| `/api/units` | GET, POST, PUT, DELETE | Admin (write) |
-| `/api/classrooms` | GET, POST, PUT, DELETE | Admin (write) |
-| `/api/tutors` | GET, POST, PUT, DELETE | Admin (write) |
-| `/api/timetable` | GET, POST, PUT, DELETE | Admin (write) |
-| `/api/timetable/kanban/:trimesterId` | GET | Auth required |
-| `/api/timetable/check-conflicts` | POST | Admin |
-| `/api/student/timetable` | GET | Auth required |
-| `/api/student/enroll` | POST | Auth required |
-| `/api/student/my-classes` | GET | Auth required |
-| `/api/student/unenroll/:id` | DELETE | Auth required |
-| `/api/calendar` | GET, POST, PUT, DELETE | Admin (write) |
+```text
+timesync/
+|-- backend/
+|   |-- config/          PostgreSQL connection pool
+|   |-- controllers/     API business logic
+|   |-- db/              schema.sql, seed.sql, init-db.js, migration.sql
+|   |-- middleware/      JWT auth and role checks
+|   |-- routes/          Express route definitions
+|   |-- utils/           schema compatibility helpers
+|   |-- package.json
+|   `-- server.js        Express entry point
+|-- frontend/
+|   |-- public/          static assets
+|   |-- src/
+|   |   |-- api/         Axios instance
+|   |   |-- components/  shared UI components
+|   |   |-- context/     auth context
+|   |   |-- pages/       admin, auth, and student pages
+|   |   `-- utils/       timetable/export helpers
+|   |-- package.json
+|   `-- vite.config.js
+`-- README.md
+```
 
-## 🛡️ Security
+## Prerequisites
 
-- JWT access tokens (15min) + refresh tokens (7 days)
-- bcrypt password hashing (10 rounds)
-- Role-based access control middleware
-- SQL parameterized queries (injection prevention)
-- CORS configured for frontend origin
-- Input validation on all endpoints
+- Node.js 18 or newer
+- PostgreSQL 14 or newer
+- npm
 
-## 📊 Database Schema
+## Backend Configuration
 
-9 relational tables with foreign keys:
-`users`, `degrees`, `trimesters`, `units`, `classrooms`, `tutors`, `tutor_units`, `timetable_entries`, `student_selections`, `academic_calendar`
+Create `backend/.env` if you need values different from the defaults:
 
-Unique constraints prevent:
-- Double-booking classrooms (same room + day + time)
-- Double-booking tutors (same tutor + day + time)
-- Duplicate student enrollments
+```env
+PORT=5000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=timesync_db
+
+JWT_SECRET=replace-with-a-local-development-secret
+JWT_REFRESH_SECRET=replace-with-a-local-refresh-secret
+```
+
+If these database variables are not set, the backend defaults to `localhost:5432`, user `postgres`, password `postgres`, and database `timesync_db`.
+
+## Setup
+
+### 1. Create the database
+
+```bash
+psql -U postgres -c "CREATE DATABASE timesync_db;"
+```
+
+### 2. Install backend dependencies and initialize tables
+
+```bash
+cd backend
+npm install
+npm run db:init
+```
+
+Optional sample data:
+
+```bash
+npm run db:seed
+```
+
+The optional seed file is intended for local demo data and includes sample academic records. It also creates `admin.timesync@usc.edu.au` with password `admin123` and `student.timesync@usc.edu.au` with password `student123`.
+
+### 3. Install frontend dependencies
+
+```bash
+cd ../frontend
+npm install
+```
+
+## Running Locally
+
+Start the backend:
+
+```bash
+cd backend
+npm run dev
+```
+
+Backend URL:
+
+```text
+http://localhost:5000
+```
+
+Start the frontend in another terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend URL:
+
+```text
+http://localhost:5173
+```
+
+The Vite dev server proxies `/api` requests to `http://localhost:5000`.
+
+## User Access
+
+Public registration creates student accounts. To create an admin account manually in a local database, register a user first and then update that user's role in PostgreSQL:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin.timesync@usc.edu.au';
+```
+
+## Main Frontend Routes
+
+| Route | Access | Purpose |
+| --- | --- | --- |
+| `/login` | Public | Sign in |
+| `/register` | Public | Create student account |
+| `/view-only-timetable` | Public | Read-only published timetable |
+| `/admin` | Admin | Admin dashboard |
+| `/admin/degrees` | Admin | Degree and course management |
+| `/admin/trimesters` | Admin | Academic years and teaching periods |
+| `/admin/classrooms` | Admin | Classroom management |
+| `/admin/tutors` | Admin | Tutor and availability management |
+| `/admin/timetable` | Admin | Class generation and scheduler |
+| `/admin/timetable/routine/:trimesterId` | Admin | Routine timetable |
+| `/admin/download-timetable` | Admin | Timetable export |
+| `/admin/calendar` | Admin | Academic calendar |
+| `/student` | Student | Student dashboard |
+| `/student/timetable` | Student | View published timetable |
+| `/student/select-classes` | Student | Select/enrol in classes |
+| `/student/my-classes` | Student | View and drop enrolled classes |
+
+## API Overview
+
+| Resource | Base path | Notes |
+| --- | --- | --- |
+| Auth | `/api/auth` | Register, login, refresh, logout |
+| Public timetable data | `/api/public` | Public read-only degrees, periods, timetable |
+| Degrees | `/api/degrees` | CRUD plus import extract/publish |
+| Courses | `/api/courses` | Course CRUD and degree/period filtering |
+| Legacy course alias | `/api/units` | Backward-compatible alias for `/api/courses` |
+| Teaching periods | `/api/trimesters` | Academic years, import, publish, CRUD |
+| Classrooms | `/api/classrooms` | Room CRUD |
+| Tutors | `/api/tutors` | Tutor CRUD |
+| Tutor availability | `/api/tutor-availability` | Admin-only availability management |
+| Classes | `/api/classes` | Generated class instances |
+| Timetable | `/api/timetable` | Scheduled entries, kanban/grid data, conflict checks |
+| Student | `/api/student` | Student timetable, enrolment, my classes, unenrol |
+| Calendar | `/api/calendar` | Academic calendar |
+| Health check | `/api/health` | Backend status |
+
+## Database Notes
+
+The current schema is PostgreSQL-based and uses UUID primary keys.
+
+Important tables:
+
+- `users`
+- `degrees`
+- `academic_years`
+- `trimesters`
+- `units`
+- `unit_degrees`
+- `unit_trimesters`
+- `unit_offering_patterns`
+- `degree_course_imports`
+- `classrooms`
+- `tutors`
+- `tutor_units`
+- `tutor_availability`
+- `classes`
+- `timetable_entries`
+- `student_selections`
+- `academic_calendar`
+- `teaching_period_events`
+
+Courses are stored in the legacy `units` table for database compatibility. The current API and UI use the term "courses", and `/api/units` remains as a legacy route alias.
+
+## Useful Commands
+
+Backend:
+
+```bash
+cd backend
+npm run dev
+npm start
+npm run db:init
+npm run db:seed
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run dev
+npm run build
+npm run preview
+npm run lint
+```
+
+## Security
+
+- Passwords are hashed with bcryptjs.
+- Access and refresh tokens are issued through JWT.
+- Protected routes require a valid access token.
+- Admin-only API actions use role-based middleware.
+- PostgreSQL queries use parameterized statements.
+- CORS defaults to the Vite frontend origin in development.

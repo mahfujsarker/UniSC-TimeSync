@@ -1,5 +1,5 @@
 /**
- * TTMS App — Main routing configuration.
+ * UniSC TimeSync App — Main routing configuration.
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';

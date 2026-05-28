@@ -10,6 +10,8 @@ const ROOM_CAPACITIES = {
   normal: 30
 };
 
+// Class groups are generated from expected enrolment and room type. The room
+// capacity assumptions match the scheduler's lab/normal-room constraints.
 function calculateNumberOfClasses(totalStudents, roomType) {
   const capacity = ROOM_CAPACITIES[roomType] || 30;
   return Math.max(1, Math.ceil(totalStudents / capacity));
@@ -290,6 +292,8 @@ async function createBatchForTrimester(req, res) {
     const results = [];
     let totalGenerated = 0;
 
+    // For each offered course, create Group A/B/C... only if that course has
+    // not already been generated for the selected teaching period.
     for (const course of coursesResult.rows) {
       if (course.has_existing_classes) {
         results.push({

@@ -27,7 +27,7 @@ const SLOT_HEIGHT = 48;
 const ZOOM_MIN = 0.35;
 const ZOOM_MAX = 1.5;
 const ZOOM_STEP = 0.1;
-const ZOOM_STORAGE_KEY = 'ttms:timetable-board-zoom';
+const ZOOM_STORAGE_KEY = 'timesync:timetable-board-zoom';
 const BOARD_HEADER_ROWS = 2;
 
 const DAY_COLORS = {
@@ -307,6 +307,8 @@ export default function TimetableManager() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Bootstrap selector data once. Later effects react to selected filters and
+    // load courses/timetable entries for the active teaching period.
     Promise.all([
       api.get('/degrees'),
       api.get('/trimesters/academic-years'),
@@ -351,6 +353,8 @@ export default function TimetableManager() {
   }, [selectedAcademicYear, selectedTrimester, teachingPeriodsForYear]);
 
   const loadCourses = useCallback(async () => {
+    // Courses are filtered by teaching period offering pattern and optional
+    // degree. Their total_students value drives class generation estimates.
     if (!selectedTrimester) {
       setCourses([]);
       return;
@@ -518,6 +522,8 @@ export default function TimetableManager() {
   };
 
   const autoScheduleClass = async (cls, course, { showFailureToast = true } = {}) => {
+    // Try the first valid room/tutor/day/time combination. The backend remains
+    // the source of truth for conflict and tutor-availability validation.
     const requiredCapacity = cls.max_capacity || (course?.classroom_type === 'lab' ? 25 : 30);
     const suitableRooms = classrooms.filter(r =>
       r.type === (course?.classroom_type || 'normal') &&

@@ -1,3 +1,8 @@
+/**
+ * Shared dashboard layout for admin and student portals.
+ * Pages provide their own nav items while this shell owns the responsive
+ * sidebar, top navbar, and nested route outlet.
+ */
 import { NavLink, Outlet } from 'react-router-dom';
 import { useState } from 'react';
 import Navbar from './Navbar';

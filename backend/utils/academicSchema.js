@@ -2,6 +2,11 @@ const pool = require('../config/db');
 
 let ensured = false;
 
+/**
+ * Keeps older local databases compatible with the current TimeSync schema.
+ * Controllers call this before academic queries so missing columns/tables are
+ * created once per server process instead of requiring manual SQL migrations.
+ */
 async function ensureAcademicSchema() {
   if (ensured) return;
 
@@ -117,6 +122,8 @@ async function ensureAcademicSchema() {
 }
 
 async function backfillAcademicYears() {
+  // Existing teaching periods may predate academic_years. Infer a year from
+  // the period name or start date, create the year row, then link the periods.
   const years = await pool.query(`
     SELECT DISTINCT COALESCE(
       NULLIF(substring(name from '(20[0-9]{2})'), '')::INTEGER,
@@ -178,6 +185,8 @@ function inferPeriodNumber() {
 }
 
 async function backfillUnitOfferingPatterns() {
+  // Convert legacy direct course-period links into reusable offering patterns
+  // such as TRIMESTER 1, SESSION 3, or SEMESTER 2.
   await pool.query(`
     INSERT INTO unit_offering_patterns (unit_id, period_type, period_number, code)
     SELECT DISTINCT ut.unit_id, t.type, t.period_number, t.code

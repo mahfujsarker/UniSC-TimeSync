@@ -201,6 +201,8 @@ function inferRoomType(fragment) {
   return /\b(lab|laboratory|computer lab)\b/i.test(fragment) ? 'lab' : 'normal';
 }
 
+// Lightweight extractor for UniSC course codes found in public page text.
+// Results are draft suggestions; admins review before publishing.
 function extractCourses(text, sourceUrl) {
   const courseRegex = /\b([A-Z]{3,4}[0-9]{3})\b\s*[-:–—]?\s*([A-Z][A-Za-z0-9 &,()'/-]{3,100})?/g;
   const courses = new Map();
@@ -227,6 +229,8 @@ function extractCourses(text, sourceUrl) {
   return [...courses.values()].slice(0, 120);
 }
 
+// Flag possible existing records so imports can update/merge instead of
+// creating duplicate degrees or courses with the same code/name.
 async function attachDuplicateMatches(payload) {
   const degreeParams = [];
   const degreeConditions = [];
@@ -296,7 +300,7 @@ async function extractImport(req, res) {
     }
 
     const response = await fetch(parsedUrl.toString(), {
-      headers: { 'User-Agent': 'TTMS Degree Course Importer/1.0' },
+      headers: { 'User-Agent': 'UniSC TimeSync Degree Course Importer/1.0' },
       signal: AbortSignal.timeout(15000)
     });
     if (!response.ok) {
@@ -388,6 +392,8 @@ async function publishImport(req, res) {
     }
 
     const courseIds = [];
+    // Publish applies the reviewed payload transactionally: one degree plus
+    // any approved courses, associations, and offering patterns.
     for (const course of payload.courses || []) {
       const action = course.action || 'create';
       if (action === 'ignore') continue;

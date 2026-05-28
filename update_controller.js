@@ -3,7 +3,7 @@ const fs = require('fs');
 const newContent = `/**
  * Timetable Controller
  * Handles timetable entry CRUD with conflict detection.
- * The core logic of the TTMS system.
+ * The core logic of the UniSC TimeSync system.
  */
 const pool = require('../config/db');
 

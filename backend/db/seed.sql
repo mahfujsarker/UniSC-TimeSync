@@ -1,14 +1,14 @@
 -- ============================================
--- Seed Data for TTMS
+-- Seed Data for UniSC TimeSync
 -- ============================================
 
 -- Insert admin user (password: admin123)
 INSERT INTO users (email, password_hash, full_name, role) VALUES
-('admin@ttms.edu', '$2a$10$xVqYLGGw0E5WxMBM0dKQ.OV8JLRdKRC1LN7kGFPB.KA1z3EWF.4Oi', 'System Admin', 'admin');
+('admin.timesync@usc.edu.au', '$2a$10$iGnmFBBlZIpleukw8pMJdOWoeWi3.rYWXS00o1eFFYUju/6.OgEMq', 'System Admin', 'admin');
 
 -- Insert student user (password: student123)
 INSERT INTO users (email, password_hash, full_name, role) VALUES
-('student@ttms.edu', '$2a$10$xVqYLGGw0E5WxMBM0dKQ.OV8JLRdKRC1LN7kGFPB.KA1z3EWF.4Oi', 'Jane Student', 'student');
+('student.timesync@usc.edu.au', '$2a$10$ivURAk4.R36/KkqqEJO6YuKV9wNohXouHZpOauGe3vsJepC7CtZ/W', 'Jane Student', 'student');
 
 -- Insert degrees
 INSERT INTO degrees (name, code) VALUES
@@ -35,13 +35,13 @@ INSERT INTO classrooms (room_number, location, max_capacity, type) VALUES
 
 -- Insert tutors
 INSERT INTO tutors (name, email) VALUES
-('Dr. Sarah Chen', 'sarah.chen@ttms.edu'),
-('Prof. James Wilson', 'james.wilson@ttms.edu'),
-('Dr. Emily Rodriguez', 'emily.rodriguez@ttms.edu'),
-('Prof. Michael Brown', 'michael.brown@ttms.edu');
+('Dr. Sarah Chen', 'sarah.chen.timesync@usc.edu.au'),
+('Prof. James Wilson', 'james.wilson.timesync@usc.edu.au'),
+('Dr. Emily Rodriguez', 'emily.rodriguez.timesync@usc.edu.au'),
+('Prof. Michael Brown', 'michael.brown.timesync@usc.edu.au');
 
 -- Insert courses with new fields (total_students, class_duration)
-INSERT INto courses (name, code, classroom_type, total_students, class_duration) VALUES
+INSERT INTO units (name, code, classroom_type, total_students, class_duration) VALUES
 ('Introduction to Programming', 'ICT100', 'lab', 60, 2),
 ('Data Structures', 'ICT200', 'normal', 45, 2),
 ('Database Systems', 'ICT210', 'lab', 50, 2),
@@ -69,12 +69,12 @@ INSERT INTO unit_offering_patterns (unit_id, period_type, period_number, code) V
 
 -- Assign tutors to courses
 INSERT INTO tutor_units (tutor_id, unit_id) VALUES
-((SELECT id FROM tutors WHERE email = 'sarah.chen@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT100')),
-((SELECT id FROM tutors WHERE email = 'james.wilson@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT200')),
-((SELECT id FROM tutors WHERE email = 'emily.rodriguez@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT210')),
-((SELECT id FROM tutors WHERE email = 'michael.brown@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT220')),
-((SELECT id FROM tutors WHERE email = 'sarah.chen@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT300')),
-((SELECT id FROM tutors WHERE email = 'james.wilson@ttms.edu'), (SELECT id FROM units WHERE code = 'ICT400'));
+((SELECT id FROM tutors WHERE email = 'sarah.chen.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT100')),
+((SELECT id FROM tutors WHERE email = 'james.wilson.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT200')),
+((SELECT id FROM tutors WHERE email = 'emily.rodriguez.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT210')),
+((SELECT id FROM tutors WHERE email = 'michael.brown.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT220')),
+((SELECT id FROM tutors WHERE email = 'sarah.chen.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT300')),
+((SELECT id FROM tutors WHERE email = 'james.wilson.timesync@usc.edu.au'), (SELECT id FROM units WHERE code = 'ICT400'));
 
 -- Create class instances (auto-generated based on capacity)
 -- ICT100: 60 students / 25 (lab cap) = 3 classes
@@ -109,12 +109,12 @@ INSERT INTO classes (unit_id, trimester_id, group_name, required_room_type, dura
 
 -- Insert timetable entries with class_id references
 INSERT INTO timetable_entries (class_id, unit_id, classroom_id, tutor_id, trimester_id, day_of_week, start_time, end_time, is_recurring) VALUES
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT100') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT100'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'sarah.chen@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '09:00', '11:00', true),
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT100') AND group_name = 'Group B'), (SELECT id FROM units WHERE code = 'ICT100'), (SELECT id FROM classrooms WHERE room_number = 'L102'), (SELECT id FROM tutors WHERE email = 'sarah.chen@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '11:00', '13:00', true),
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT200') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT200'), (SELECT id FROM classrooms WHERE room_number = 'R201'), (SELECT id FROM tutors WHERE email = 'james.wilson@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '14:00', '16:00', true),
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT210') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT210'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'emily.rodriguez@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Tuesday', '10:00', '12:00', true),
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT220') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT220'), (SELECT id FROM classrooms WHERE room_number = 'L102'), (SELECT id FROM tutors WHERE email = 'michael.brown@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Wednesday', '09:00', '11:00', true),
-((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT400') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT400'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'james.wilson@ttms.edu'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Thursday', '13:00', '16:00', true);
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT100') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT100'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'sarah.chen.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '09:00', '11:00', true),
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT100') AND group_name = 'Group B'), (SELECT id FROM units WHERE code = 'ICT100'), (SELECT id FROM classrooms WHERE room_number = 'L102'), (SELECT id FROM tutors WHERE email = 'sarah.chen.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '11:00', '13:00', true),
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT200') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT200'), (SELECT id FROM classrooms WHERE room_number = 'R201'), (SELECT id FROM tutors WHERE email = 'james.wilson.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Monday', '14:00', '16:00', true),
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT210') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT210'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'emily.rodriguez.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Tuesday', '10:00', '12:00', true),
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT220') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT220'), (SELECT id FROM classrooms WHERE room_number = 'L102'), (SELECT id FROM tutors WHERE email = 'michael.brown.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Wednesday', '09:00', '11:00', true),
+((SELECT id FROM classes WHERE unit_id = (SELECT id FROM units WHERE code = 'ICT400') AND group_name = 'Group A'), (SELECT id FROM units WHERE code = 'ICT400'), (SELECT id FROM classrooms WHERE room_number = 'L101'), (SELECT id FROM tutors WHERE email = 'james.wilson.timesync@usc.edu.au'), (SELECT id FROM trimesters WHERE name = 'Trimester 1, 2026' LIMIT 1), 'Thursday', '13:00', '16:00', true);
 
 -- Insert academic calendar events
 INSERT INTO academic_calendar (name, start_date, end_date, trimester_id) VALUES

@@ -20,6 +20,8 @@ function timeLabel(start, end) {
 }
 
 function buildAvailabilityState(availability = []) {
+  // Convert flat API rows into the nested checkbox state used by the UI:
+  // years -> periods -> optional weekday/time windows.
   return availability.reduce((state, slot) => {
     if (slot.availability_scope === 'YEAR') {
       state.years[String(slot.academic_year_id)] = true;
@@ -48,6 +50,7 @@ function buildAvailabilityState(availability = []) {
 }
 
 function flattenAvailability(state) {
+  // Convert nested UI state back into the compact payload expected by the API.
   const year_availability = Object.entries(state.years || {})
     .filter(([, checked]) => checked)
     .map(([yearId]) => yearId);
@@ -121,6 +124,8 @@ export default function TutorManager() {
   );
 
   const academicYearGroups = useMemo(() => {
+    // Group published teaching periods under academic years so a tutor can be
+    // marked available for the whole year or only selected periods/days.
     const groups = new Map();
     publishedPeriods.forEach(period => {
       if (!period.academic_year_id) return;
@@ -512,7 +517,7 @@ export default function TutorManager() {
           </div>
           <div className="form-group">
             <label className="form-label">Email</label>
-            <input className="form-input" type="email" required placeholder="jane.doe@uni.edu" value={tutorForm.email} onChange={e => setTutorForm({ ...tutorForm, email: e.target.value })} />
+            <input className="form-input" type="email" required placeholder="jane.doe.timesync@usc.edu.au" value={tutorForm.email} onChange={e => setTutorForm({ ...tutorForm, email: e.target.value })} />
           </div>
           <div className="flex gap-3 pt-2">
             <button type="submit" className="btn btn-primary flex-1">{editTutor ? 'Update' : 'Create'}</button>

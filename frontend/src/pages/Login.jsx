@@ -69,7 +69,7 @@ export default function Login() {
                 id="login-email"
                 type="email"
                 className="form-input"
-                placeholder="you@university.edu"
+                placeholder="admin.timesync@usc.edu.au"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
@@ -105,7 +105,7 @@ export default function Login() {
 
           <div className="mt-6 rounded-xl border border-white/70 bg-white/55 p-3">
             <p className="text-xs text-surface-600 text-center">
-              <strong>Demo:</strong> admin@ttms.edu / admin123 | student@ttms.edu / student123
+              <strong>Demo:</strong> admin.timesync@usc.edu.au / admin123 | student.timesync@usc.edu.au / student123
             </p>
           </div>
         </div>
